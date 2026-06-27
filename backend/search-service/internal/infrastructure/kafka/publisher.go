@@ -27,9 +27,9 @@ func NewAnalyticsPublisher(writer *segmentiokafka.Writer) *analyticsPublisher {
 	return &analyticsPublisher{writer: writer}
 }
 
-func (p *analyticsPublisher) PublishSearchLog(ctx context.Context, tenantID, query, normalizedQuery string, resultCount int) error {
+func (p *analyticsPublisher) PublishSearchLog(ctx context.Context, searchLogID, tenantID, query, normalizedQuery string, resultCount int) error {
 	event := AnalyticsEvent{
-		ID:              p.newUUID(),
+		ID:              searchLogID,
 		TenantID:        tenantID,
 		Query:           query,
 		NormalizedQuery: normalizedQuery,

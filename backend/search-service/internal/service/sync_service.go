@@ -30,11 +30,10 @@ type ProductIndexer interface {
 	SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error)
 }
 
-// ProductCache defines cache operations for product info (Redis)
 type ProductCache interface {
 	CacheProduct(ctx context.Context, tenantID, productID string, data map[string]interface{}) error
-	GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, bool, error)
-	CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int) error
+	GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error)
+	CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
 }
 
 // TranslationService defines translation operations

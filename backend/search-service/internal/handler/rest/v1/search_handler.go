@@ -1,10 +1,13 @@
 package v1
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"search-service/internal/service"
@@ -50,7 +53,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		pageSize = 20
 	}
 
-	products, total, err := h.searchSvc.Search(c.Request.Context(), tenantID, query, page, pageSize)
+	products, total, searchLogID, err := h.searchSvc.Search(c.Request.Context(), tenantID, query, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Search Service Unavailable: %v", err)})
 		return
@@ -62,11 +65,12 @@ func (h *SearchHandler) Search(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"products":    products,
-		"total":       total,
-		"page":        page,
-		"page_size":   pageSize,
-		"total_pages": totalPages,
+		"search_log_id": searchLogID,
+		"products":      products,
+		"total":         total,
+		"page":          page,
+		"page_size":     pageSize,
+		"total_pages":   totalPages,
 	})
 }
 
@@ -88,4 +92,41 @@ func (h *SearchHandler) SyncAll(c *gin.Context) {
 		"tenant_id":    tenantID,
 		"synced_count": count,
 	})
+}
+
+type ClickTrackRequest struct {
+	SearchLogID string `json:"search_log_id" binding:"required"`
+	ProductID   string `json:"product_id" binding:"required"`
+	Query       string `json:"query" binding:"required"`
+	Position    int    `json:"position" binding:"required"`
+}
+
+func (h *SearchHandler) TrackClick(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	var req ClickTrackRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid payload: %v", err)})
+		return
+	}
+
+	if req.Position <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "position must be greater than 0"})
+		return
+	}
+
+	// Process click logging in background (non-blocking)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := h.searchSvc.TrackClick(ctx, tenantID, req.SearchLogID, req.ProductID, req.Query, req.Position); err != nil {
+			log.Printf("Warning: failed to track click: %v", err)
+		}
+	}()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }

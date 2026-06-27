@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS click_logs (
     search_log_id UUID NOT NULL REFERENCES search_logs(id) ON DELETE CASCADE,
     query VARCHAR(255) NOT NULL,
     product_id UUID NOT NULL,
+    click_position INTEGER NOT NULL DEFAULT 1,
     clicked_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

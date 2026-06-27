@@ -53,7 +53,7 @@ type SearchSynonym struct {
 }
 
 func (SearchSynonym) TableName() string {
-	return "search.search_synonyms"
+	return "search_svc.search_synonyms"
 }
 
 type SearchLog struct {
@@ -66,20 +66,21 @@ type SearchLog struct {
 }
 
 func (SearchLog) TableName() string {
-	return "search.search_logs"
+	return "search_svc.search_logs"
 }
 
 type ClickLog struct {
-	ID          string    `gorm:"type:uuid;primaryKey" json:"id"`
-	TenantID    string    `gorm:"type:uuid;not null" json:"tenant_id"`
-	SearchLogID string    `gorm:"type:uuid;not null" json:"search_log_id"`
-	Query       string    `gorm:"type:varchar(255);not null" json:"query"`
-	ProductID   string    `gorm:"type:uuid;not null" json:"product_id"`
-	ClickedAt   time.Time `json:"clicked_at"`
+	ID            string    `gorm:"type:uuid;primaryKey" json:"id"`
+	TenantID      string    `gorm:"type:uuid;not null" json:"tenant_id"`
+	SearchLogID   string    `gorm:"type:uuid;not null" json:"search_log_id"`
+	Query         string    `gorm:"type:varchar(255);not null" json:"query"`
+	ProductID     string    `gorm:"type:uuid;not null" json:"product_id"`
+	ClickPosition int       `gorm:"type:integer;not null;default:1" json:"position"`
+	ClickedAt     time.Time `json:"clicked_at"`
 }
 
 func (ClickLog) TableName() string {
-	return "search.click_logs"
+	return "search_svc.click_logs"
 }
 
 type SpellcheckDictionary struct {
@@ -93,7 +94,7 @@ type SpellcheckDictionary struct {
 }
 
 func (SpellcheckDictionary) TableName() string {
-	return "search.spellcheck_dictionary"
+	return "search_svc.spellcheck_dictionary"
 }
 
 type AISuggestion struct {
@@ -108,7 +109,7 @@ type AISuggestion struct {
 }
 
 func (AISuggestion) TableName() string {
-	return "search.ai_suggestions"
+	return "search_svc.ai_suggestions"
 }
 
 type ProductEvent struct {
@@ -131,5 +132,5 @@ type SearchSyncJob struct {
 }
 
 func (SearchSyncJob) TableName() string {
-	return "search_sync_jobs"
+	return "search_svc.search_sync_jobs"
 }

@@ -124,8 +124,8 @@ func (m *MockProductIndexer) SearchProducts(ctx context.Context, tenantID, query
 // MockProductCache implements service.ProductCache
 type MockProductCache struct {
 	CacheProductFn    func(ctx context.Context, tenantID, productID string, data map[string]interface{}) error
-	GetCachedSearchFn func(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, bool, error)
-	CacheSearchFn     func(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int) error
+	GetCachedSearchFn func(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error)
+	CacheSearchFn     func(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
 }
 
 func (m *MockProductCache) CacheProduct(ctx context.Context, tenantID, productID string, data map[string]interface{}) error {
@@ -135,16 +135,16 @@ func (m *MockProductCache) CacheProduct(ctx context.Context, tenantID, productID
 	return nil
 }
 
-func (m *MockProductCache) GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, bool, error) {
+func (m *MockProductCache) GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
 	if m.GetCachedSearchFn != nil {
 		return m.GetCachedSearchFn(ctx, tenantID, query, page, pageSize)
 	}
-	return nil, 0, false, nil
+	return nil, 0, "", false, nil
 }
 
-func (m *MockProductCache) CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int) error {
+func (m *MockProductCache) CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error {
 	if m.CacheSearchFn != nil {
-		return m.CacheSearchFn(ctx, tenantID, query, page, pageSize, data, total)
+		return m.CacheSearchFn(ctx, tenantID, query, page, pageSize, data, total, searchLogID)
 	}
 	return nil
 }

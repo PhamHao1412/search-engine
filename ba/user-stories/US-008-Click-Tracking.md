@@ -23,7 +23,7 @@ Tôi muốn ghi nhận chi tiết hành vi click sản phẩm của khách hàng
 
 ## Điều kiện tiên quyết
 * Phiên tìm kiếm của người dùng đã được tạo và trả về mã định danh `search_log_id`.
-* Kafka Broker và Analytics Worker đang chạy bình thường.
+* Cơ sở dữ liệu PostgreSQL khả dụng.
 
 ## Luồng chính
 1. Buyer thực hiện tìm kiếm trên ứng dụng. API trả về danh sách sản phẩm kèm theo mã định danh `search_log_id` trong phần metadata của response.
@@ -36,14 +36,14 @@ Tôi muốn ghi nhận chi tiết hành vi click sản phẩm của khách hàng
      {
        "search_log_id": "uuid-cua-phien-tim-kiem",
        "product_id": "uuid-cua-san-pham-duoc-click",
-       "query": "coffee"
+       "query": "coffee",
+       "position": 3
      }
      ```
 4. Search API nhận request, kiểm tra tính hợp lệ sơ bộ của dữ liệu.
-5. Search API đẩy một sự kiện `ClickEvent` vào Kafka topic `analytics-events`.
+5. Search API chuyển tiếp yêu cầu ghi nhận Click Log vào Goroutine ngầm để thực thi bất đồng bộ.
 6. Search API lập tức phản hồi mã `200 OK` về cho Frontend (luồng xử lý mất dưới 2ms, không làm gián đoạn chuyển trang của người dùng).
-7. Analytics Consumer (Go worker) tiêu thụ event từ Kafka topic `analytics-events`.
-8. Consumer thực hiện lưu trữ thông tin click vào bảng `click_logs` trong PostgreSQL bằng GORM.
+7. Goroutine ngầm gọi Analytics Repository để thực hiện lưu trữ thông tin click vào bảng `click_logs` trong PostgreSQL bằng GORM.
 
 ## Sequence Diagram
 
@@ -52,23 +52,18 @@ sequenceDiagram
 actor Buyer
 participant FE as Frontend
 participant SearchAPI as Search API (Gin)
-participant Broker as Kafka Broker (KRaft)
-participant Worker as Analytics Worker
 participant DB as PostgreSQL (GORM)
 
 Buyer->>FE: Click vào sản phẩm trên kết quả tìm kiếm
 FE->>SearchAPI: POST /api/v1/analytics/click (Header: X-Tenant-ID)
 Note over FE,SearchAPI: Gửi ngầm (asynchronous) bằng fetch/navigator.sendBeacon
-SearchAPI->>Broker: Publish ClickEvent lên topic 'analytics-events'
+SearchAPI->>DB: Ghi nhận Click Log bất đồng bộ (Goroutine)
 SearchAPI-->>FE: Trả về 200 OK (Thành công ngay lập tức)
 FE->>Buyer: Chuyển hướng sang trang chi tiết sản phẩm
-Note over Broker,Worker: Xử lý bất đồng bộ
-Broker->>Worker: Consume ClickEvent
-Worker->>DB: Insert record vào bảng 'click_logs' bằng GORM
 ```
 
 ## Tiêu chí chấp nhận (AC)
-*   **AC-001**: API Click Tracking phải phản hồi nhanh dưới 5ms (P99) bằng cách đẩy message trực tiếp vào Kafka và không thực hiện ghi DB đồng bộ.
+*   **AC-001**: API Click Tracking phải phản hồi nhanh dưới 5ms (P99) bằng cách đẩy yêu cầu ghi DB vào background goroutine bất đồng bộ.
 *   **AC-002**: Bản ghi lưu trong bảng `click_logs` phải có giá trị khóa ngoại `search_log_id` khớp chính xác với bản ghi `search_logs` tương ứng để phục vụ phân tích.
 *   **AC-003**: Nếu người dùng click cùng một sản phẩm nhiều lần trong cùng một phiên tìm kiếm, hệ thống vẫn ghi nhận đầy đủ các sự kiện click phục vụ thống kê tần suất.
 

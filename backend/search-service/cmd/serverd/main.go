@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 	"search-service/internal/app"
 	v1 "search-service/internal/handler/rest/v1"
 	"search-service/internal/infrastructure/ai"
-	"search-service/internal/infrastructure/kafka"
 	"search-service/internal/infrastructure/opensearch"
 	"search-service/internal/infrastructure/postgres"
 	"search-service/internal/infrastructure/redis"
@@ -65,19 +63,18 @@ func main() {
 	// Ensure OpenSearch index and mappings exist
 	productIndexer.EnsureIndex(context.Background())
 
-	// Initialize Kafka Writer and AnalyticsPublisher
-	kafkaWriter := kafka.InitWriter(strings.Split(cfg.KafkaBrokers, ","), "search-analytics-events")
-	analyticsPublisher := kafka.NewAnalyticsPublisher(kafkaWriter)
+	// Initialize GORM-based AnalyticsRepository
+	analyticsRepo := repository.NewAnalyticsRepository(dbConn)
 
 	searchRepo := repository.NewSearchRepository(dbConn)
 	translator := translate.NewTranslationService()
 	tagGenerator := ai.NewTagGenerator(cfg.OpenAIAPIKey, cfg.OpenAIModel)
 	syncSvc := service.NewSyncService(searchRepo, productIndexer, productCache, translator, tagGenerator)
 
-	searchSvc := service.NewSearchService(productIndexer, productCache, analyticsPublisher)
+	searchSvc := service.NewSearchService(productIndexer, productCache, analyticsRepo)
 	searchHandler := v1.NewSearchHandler(searchSvc, syncSvc)
 
-	log.Printf("Initialized backend services: Database: %T, RedisCache: %T, OpenSearchIndexer: %T, AnalyticsPublisher: %T, SyncService: %T\n", searchRepo, productCache, productIndexer, analyticsPublisher, syncSvc)
+	log.Printf("Initialized backend services: Database: %T, RedisCache: %T, OpenSearchIndexer: %T, AnalyticsRepository: %T, SyncService: %T\n", searchRepo, productCache, productIndexer, analyticsRepo, syncSvc)
 
 	// 4. Setup Gin Router
 	if cfg.Env == "production" {

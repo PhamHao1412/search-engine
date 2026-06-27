@@ -52,25 +52,28 @@ Tôi muốn tìm kiếm sản phẩm bằng từ khóa,
     * Loại bỏ khoảng trắng dư thừa.
     * Chuẩn hóa ký tự đặc biệt.
 
-4. Search API kiểm tra Redis Cache.
+4. Search API kiểm tra Redis Cache (Key: `search:{tenant_id}:{query}:{page}:{page_size}`).
 
-5. Nếu kết quả đã tồn tại trong Cache:
+5. Nếu kết quả đã tồn tại trong Cache (Cache Hit):
 
-    * Trả về kết quả từ Cache.
+    * Trích xuất kết quả tìm kiếm và mã định danh `search_log_id` từ cache.
+    * Trả về kết quả ngay lập tức cho Frontend.
+    * **Không ghi nhận bản ghi mới vào PostgreSQL** để tránh trùng lặp dữ liệu.
 
-6. Nếu không tồn tại trong Cache:
+6. Nếu không tồn tại trong Cache (Cache Miss):
 
+    * Hệ thống sinh ra một `search_log_id` (UUID) mới.
     * Thực hiện truy vấn OpenSearch.
 
 7. OpenSearch trả về danh sách sản phẩm phù hợp.
 
 8. Search API thực hiện ranking kết quả.
 
-9. Hệ thống lưu kết quả vào Redis Cache.
+9. Hệ thống lưu kết quả tìm kiếm cùng mã `search_log_id` vừa sinh vào Redis Cache (TTL: 10 phút).
 
-10. Hệ thống ghi nhận Search Analytics.
+10. Hệ thống ghi nhận Search Analytics bằng cách lưu trực tiếp bản ghi vào bảng `search_logs` trong PostgreSQL (xử lý bất đồng bộ qua Goroutine ngầm để không block luồng tìm kiếm).
 
-11. Hệ thống trả kết quả cho Customer.
+11. Hệ thống trả kết quả kèm mã `search_log_id` cho Customer.
 
 ## Luồng thay thế
 
@@ -111,7 +114,7 @@ participant FE as Frontend
 participant SearchAPI as Search API (Gin)
 participant Redis as Redis Cache
 participant OpenSearch as OpenSearch
-participant Broker as Kafka Broker (KRaft)
+participant DB as PostgreSQL (GORM)
 
 Buyer->>FE: Enter Search Keyword
 
@@ -123,13 +126,15 @@ SearchAPI->>Redis: Check Cache (Key: search:{tenant_id}:{query})
 
 alt Cache Hit
 
-Redis-->>SearchAPI: Cached Result
+Redis-->>SearchAPI: Cached Result + search_log_id
+Note over SearchAPI,Redis: Không ghi nhận vào PostgreSQL
 
-SearchAPI-->>FE: Return Search Result
+SearchAPI-->>FE: Return Search Result (with search_log_id)
 
 else Cache Miss
 
 Redis-->>SearchAPI: Cache Not Found
+SearchAPI->>SearchAPI: Generate search_log_id (UUID)
 
 SearchAPI->>OpenSearch: Query Multi-fields (product_name_en, product_name_vi, etc.)
 
@@ -137,13 +142,13 @@ OpenSearch-->>SearchAPI: Raw Search Results
 
 SearchAPI->>SearchAPI: Apply Ranking (BM25, Featured, Inventory)
 
-SearchAPI->>Redis: Save Cache (TTL: 10 mins)
+SearchAPI->>Redis: Save Cache (Products + search_log_id, TTL: 10 mins)
 
-SearchAPI-->>FE: Return Search Result
+SearchAPI->>DB: Save Search Log (Async Goroutine)
+
+SearchAPI-->>FE: Return Search Result (with search_log_id)
 
 end
-
-SearchAPI->>Broker: Publish search-analytics-events (SearchEvent)
 ```
 
 ### OpenSearch Failure Flow

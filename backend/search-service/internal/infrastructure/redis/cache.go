@@ -3,11 +3,13 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"search-service/internal/service"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type redisCache struct {
@@ -28,33 +30,36 @@ func (c *redisCache) CacheProduct(ctx context.Context, tenantID, productID strin
 	return c.client.Set(ctx, redisKey, string(val), 24*time.Hour).Err()
 }
 
-func (c *redisCache) GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, bool, error) {
+func (c *redisCache) GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
 	redisKey := fmt.Sprintf("search:%s:%s:%d:%d", tenantID, query, page, pageSize)
 	val, err := c.client.Get(ctx, redisKey).Result()
-	if err == redis.Nil {
-		return nil, 0, false, nil
+	if errors.Is(err, redis.Nil) {
+		return nil, 0, "", false, nil
 	} else if err != nil {
-		return nil, 0, false, err
+		return nil, 0, "", false, err
 	}
 
 	var cached struct {
-		Total    int                      `json:"total"`
-		Products []map[string]interface{} `json:"products"`
+		Total       int                      `json:"total"`
+		Products    []map[string]interface{} `json:"products"`
+		SearchLogID string                   `json:"search_log_id"`
 	}
 	if err := json.Unmarshal([]byte(val), &cached); err != nil {
-		return nil, 0, false, err
+		return nil, 0, "", false, err
 	}
-	return cached.Products, cached.Total, true, nil
+	return cached.Products, cached.Total, cached.SearchLogID, true, nil
 }
 
-func (c *redisCache) CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int) error {
+func (c *redisCache) CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error {
 	redisKey := fmt.Sprintf("search:%s:%s:%d:%d", tenantID, query, page, pageSize)
 	cached := struct {
-		Total    int                      `json:"total"`
-		Products []map[string]interface{} `json:"products"`
+		Total       int                      `json:"total"`
+		Products    []map[string]interface{} `json:"products"`
+		SearchLogID string                   `json:"search_log_id"`
 	}{
-		Total:    total,
-		Products: data,
+		Total:       total,
+		Products:    data,
+		SearchLogID: searchLogID,
 	}
 	val, err := json.Marshal(cached)
 	if err != nil {
