@@ -9,3 +9,10 @@
 .go/
 .tmp/
 bin/
+
+# Frontend dependencies and builds
+node_modules/
+dist/
+.vite/
+npm-install-out.log
+.pnpm-store/
