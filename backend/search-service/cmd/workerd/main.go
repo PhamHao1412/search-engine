@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"search-service/internal/app"
 	"search-service/internal/infrastructure/ai"
@@ -49,6 +50,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect redis: %v", err)
 	}
+
+	// Clear Redis cache on startup
+	log.Println("Clearing Redis cache on startup...")
+	flushCtx, flushCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := redisClient.FlushDB(flushCtx).Err(); err != nil {
+		log.Printf("Warning: failed to clear Redis cache: %v", err)
+	} else {
+		log.Println("Successfully cleared Redis cache on startup.")
+	}
+	flushCancel()
+
 	productCache := redis.NewRedisCache(redisClient)
 
 	opensearchClient, err := opensearch.Connect(cfg.OpenSearchURL)
@@ -57,7 +69,6 @@ func main() {
 	}
 	productIndexer := opensearch.NewOpenSearchIndexer(opensearchClient)
 
-	// Ensure OpenSearch index exists
 	productIndexer.EnsureIndex(context.Background())
 
 	translator := translate.NewTranslationService()

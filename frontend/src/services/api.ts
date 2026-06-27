@@ -1,4 +1,4 @@
-import { SearchResponse, SyncResponse, ClickTrackRequest, SearchDebugInfo } from '../types';
+import { SearchResponse, SyncResponse, ClickTrackRequest, SearchDebugInfo, Suggestion, Product } from '../types';
 
 const BASE_URL = '/api/v1';
 
@@ -73,6 +73,54 @@ export const searchApi = {
     }).catch((err) => {
       console.warn('Analytics Click Tracking failed background execution:', err);
     });
+  },
+
+  /**
+   * Fetch autocomplete suggestions for a given query prefix
+   */
+  async getSuggestions(query: string, tenantId: string): Promise<Suggestion[]> {
+    if (!query || query.trim().length < 2) {
+      return [];
+    }
+    try {
+      const params = new URLSearchParams({ q: query.trim() });
+      const response = await fetch(`${BASE_URL}/suggest?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-Tenant-ID': tenantId,
+        },
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      return data.suggestions || [];
+    } catch (err) {
+      console.warn('Failed to fetch suggestions:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Fetch product details by ID
+   */
+  async getProduct(id: string, tenantId: string): Promise<Product> {
+    const response = await fetch(`${BASE_URL}/products/${id}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch product details with status ${response.status}`);
+    }
+
+    return response.json();
   },
 };
 

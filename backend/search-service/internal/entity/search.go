@@ -127,10 +127,23 @@ type SearchSyncJob struct {
 	Status       string    `gorm:"type:varchar(50);not null;default:'pending'" json:"status"`
 	ErrorMessage *string   `gorm:"type:text" json:"error_message,omitempty"`
 	RetryCount   int       `gorm:"type:integer;not null;default:0" json:"retry_count"`
+	TextHash     string    `gorm:"type:varchar(64)" json:"text_hash"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (SearchSyncJob) TableName() string {
 	return "search_svc.search_sync_jobs"
+}
+
+type Suggestion struct {
+	ID            string  `json:"id"`
+	Text          string  `json:"text"`
+	Brand         string  `json:"brand"`
+	Price         float64 `json:"price"`
+	ProductNameVI string  `json:"product_name_vi"`
+	ProductNameEN string  `json:"product_name_en"`
+	ProductNameTH string  `json:"product_name_th"`
+	ImageURL      string  `json:"image_url"`
+	Inventory     int     `json:"inventory"`
 }

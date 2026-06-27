@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/md5"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -26,14 +28,18 @@ type SearchRepository interface {
 // ProductIndexer defines indexing operations for search indexing engine (OpenSearch)
 type ProductIndexer interface {
 	IndexProduct(ctx context.Context, doc map[string]interface{}, productID string) error
+	UpdateProduct(ctx context.Context, doc map[string]interface{}, productID string) error
 	EnsureIndex(ctx context.Context)
 	SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error)
+	SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
 }
 
 type ProductCache interface {
 	CacheProduct(ctx context.Context, tenantID, productID string, data map[string]interface{}) error
 	GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error)
 	CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
+	GetCachedSuggestions(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error)
+	CacheSuggestions(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error
 }
 
 // TranslationService defines translation operations
@@ -84,7 +90,7 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 	// Fetch or create the sync job status
 	job, err := s.repo.GetSyncJobByProductID(ctx, product.ID)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			job = &entity.SearchSyncJob{
 				ID:        s.newUUID(),
 				TenantID:  product.TenantID,
@@ -98,12 +104,54 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 	}
 	job.UpdatedAt = time.Now()
 
+	// Text Hash Check
+	currentHash := s.calculateTextHash(product.Name, product.Description)
+	textChanged := job.TextHash != currentHash
+
 	var syncStatus = "success"
 	var syncErrorMsg string
 
-	// 1. Translate to EN and TH
 	var nameEN, descEN, nameTH, descTH string
+	var tags []string
+	var searchTagsStr string
 
+	if !textChanged && job.Status == "success" {
+		log.Printf("[SyncProduct] Text hash unchanged for product %s. Skipping translation/AI calls and performing partial OpenSearch update.\n", product.ID)
+
+		updateDoc := map[string]interface{}{
+			"brand":     product.Brand,
+			"price":     product.Price,
+			"image_url": product.ImageURL,
+			"inventory": product.Inventory,
+			"featured":  product.Featured,
+			"status":    product.Status,
+		}
+
+		if opensearchErr := s.indexer.UpdateProduct(ctx, updateDoc, product.ID); opensearchErr != nil {
+			log.Printf("Failed to perform partial update in OpenSearch: %v. Falling back to full index.", opensearchErr)
+			textChanged = true // Fall back to full index if update fails
+		} else {
+			// Update the Redis cache as well
+			cacheData := map[string]interface{}{
+				"product":   product,
+				"cached_at": time.Now().Format(time.RFC3339),
+			}
+			if err := s.cache.CacheProduct(ctx, product.TenantID, product.ID, cacheData); err != nil {
+				log.Printf("Failed to cache updated product in Redis: %v", err)
+			}
+
+			job.UpdatedAt = time.Now()
+			if err := s.repo.SaveSyncJob(ctx, job); err != nil {
+				log.Printf("Warning: Failed to save sync job status: %v", err)
+			}
+			return nil
+		}
+	}
+
+	// Full indexing flow:
+	job.TextHash = currentHash
+
+	// 1. Translate to EN and TH
 	if product.OriginalLanguage == "vi" {
 		nameEN, err = s.translator.Translate(ctx, product.Name, "en")
 		if err != nil {
@@ -134,7 +182,7 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 	}
 
 	// 2. Generate search tags via AI
-	tags, err := s.tagGenerator.GenerateSearchTags(ctx, product.Name, product.Description)
+	tags, err = s.tagGenerator.GenerateSearchTags(ctx, product.Name, product.Description)
 	if err != nil {
 		log.Printf("AI GenerateSearchTags failed: %v", err)
 		if syncStatus == "success" {
@@ -143,7 +191,7 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 		}
 		tags = []string{"sảnphẩm", "amaze"}
 	}
-	searchTagsStr := strings.Join(tags, " ")
+	searchTagsStr = strings.Join(tags, " ")
 
 	// 3. Save translations to Postgres (schema product_svc)
 	translationEN := &entity.ProductTranslation{
@@ -175,7 +223,17 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 	}
 
 	// 4. Index OpenSearch
-	suggestInputs := []string{product.Name, nameEN, nameTH}
+	var suggestNames []string
+	suggestSeen := make(map[string]bool)
+	for _, n := range []string{product.Name, nameEN, nameTH} {
+		n = strings.TrimSpace(n)
+		if n != "" && !suggestSeen[n] {
+			suggestSeen[n] = true
+			suggestNames = append(suggestNames, n)
+		}
+	}
+	suggestText := strings.Join(suggestNames, " ")
+
 	doc := map[string]interface{}{
 		"id":              product.ID,
 		"tenant_id":       product.TenantID,
@@ -187,16 +245,12 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 		"description_th":  descTH,
 		"brand":           product.Brand,
 		"price":           product.Price,
+		"image_url":       product.ImageURL,
 		"inventory":       product.Inventory,
 		"featured":        product.Featured,
 		"status":          product.Status,
 		"search_tags":     searchTagsStr,
-		"suggest": map[string]interface{}{
-			"input": suggestInputs,
-			"contexts": map[string]interface{}{
-				"tenant_context": []string{product.TenantID},
-			},
-		},
+		"suggest":         suggestText,
 	}
 
 	var opensearchErr error
@@ -239,6 +293,12 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 
 	log.Printf("Successfully completed search indexing sync for product %s with status %s\n", product.ID, syncStatus)
 	return nil
+}
+
+func (s *syncService) calculateTextHash(name, description string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(name + "|" + description))
+	return fmt.Sprintf("%x", hasher.Sum(nil))
 }
 
 func (s *syncService) ReprocessFailedJobs(ctx context.Context) error {

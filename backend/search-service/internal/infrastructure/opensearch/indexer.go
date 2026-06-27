@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	opensearchgo "github.com/opensearch-project/opensearch-go/v2"
 	"github.com/opensearch-project/opensearch-go/v2/opensearchapi"
+	"search-service/internal/entity"
 	"search-service/internal/service"
 )
 
@@ -48,22 +51,91 @@ func (idx *opensearchIndexer) IndexProduct(ctx context.Context, doc map[string]i
 	return nil
 }
 
+func (idx *opensearchIndexer) UpdateProduct(ctx context.Context, doc map[string]interface{}, productID string) error {
+	updateDoc := map[string]interface{}{
+		"doc": doc,
+	}
+	docJSON, err := json.Marshal(updateDoc)
+	if err != nil {
+		return err
+	}
+
+	req := opensearchapi.UpdateRequest{
+		Index:      "products",
+		DocumentID: productID,
+		Body:       strings.NewReader(string(docJSON)),
+		Refresh:    "true",
+	}
+
+	res, err := req.Do(ctx, idx.client)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		bodyBytes, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("opensearch update error: %s", string(bodyBytes))
+	}
+	return nil
+}
+
 func (idx *opensearchIndexer) EnsureIndex(ctx context.Context) {
 	indexName := "products_v1"
 	aliasName := "products"
 
-	existsReq := opensearchapi.CatIndicesRequest{Index: []string{indexName}}
-	res, err := existsReq.Do(ctx, idx.client)
-	if err == nil {
-		defer res.Body.Close()
-		if res.StatusCode == http.StatusOK {
-			return
+	// Wait for OpenSearch to be online (up to 20 seconds)
+	var res *opensearchapi.Response
+	var err error
+	for i := 0; i < 10; i++ {
+		existsReq := opensearchapi.CatIndicesRequest{Index: []string{indexName}}
+		res, err = existsReq.Do(ctx, idx.client)
+		if err == nil {
+			break
+		}
+		log.Printf("[OpenSearch] Waiting for OpenSearch to be online... (attempt %d/10)", i+1)
+		time.Sleep(2 * time.Second)
+	}
+
+	if err != nil {
+		log.Printf("[OpenSearch] CRITICAL: OpenSearch is offline after 20 seconds, skipping index check: %v", err)
+		return
+	}
+
+	defer res.Body.Close()
+	if res.StatusCode == http.StatusOK {
+		log.Printf("[OpenSearch] Index %s already exists.", indexName)
+		return
+	}
+
+	// Double check if a concrete index named aliasName already exists
+	checkAliasReq := opensearchapi.CatIndicesRequest{Index: []string{aliasName}}
+	aliasRes, checkErr := checkAliasReq.Do(ctx, idx.client)
+	if checkErr == nil {
+		defer aliasRes.Body.Close()
+		if aliasRes.StatusCode == http.StatusOK {
+			log.Printf("[OpenSearch] WARNING: A concrete index named '%s' already exists instead of an alias! Trying to delete it to prevent collision...", aliasName)
+			deleteReq := opensearchapi.IndicesDeleteRequest{Index: []string{aliasName}}
+			delRes, delErr := deleteReq.Do(ctx, idx.client)
+			if delErr == nil {
+				delRes.Body.Close()
+				log.Printf("[OpenSearch] Successfully deleted concrete index '%s'.", aliasName)
+			} else {
+				log.Printf("[OpenSearch] Failed to delete concrete index '%s': %v", aliasName, delErr)
+			}
 		}
 	}
 
 	mapping := `{
 		"settings": {
 			"analysis": {
+				"filter": {
+					"autocomplete_filter": {
+						"type": "ngram",
+						"min_gram": 2,
+						"max_gram": 10
+					}
+				},
 				"analyzer": {
 					"vi_ascii_analyzer": {
 						"type": "custom",
@@ -72,12 +144,22 @@ func (idx *opensearchIndexer) EnsureIndex(ctx context.Context) {
 							"lowercase",
 							"asciifolding"
 						]
+					},
+					"autocomplete_analyzer": {
+						"type": "custom",
+						"tokenizer": "standard",
+						"filter": [
+							"lowercase",
+							"asciifolding",
+							"autocomplete_filter"
+						]
 					}
 				}
 			},
 			"index": {
 				"number_of_shards": 1,
-				"number_of_replicas": 0
+				"number_of_replicas": 0,
+				"max_ngram_diff": 8
 			}
 		},
 		"mappings": {
@@ -92,102 +174,150 @@ func (idx *opensearchIndexer) EnsureIndex(ctx context.Context) {
 				"description_th": { "type": "text", "analyzer": "thai" },
 				"brand": { "type": "keyword" },
 				"price": { "type": "double" },
+				"image_url": { "type": "keyword" },
 				"inventory": { "type": "integer" },
 				"featured": { "type": "boolean" },
 				"status": { "type": "keyword" },
 				"search_tags": { "type": "text", "analyzer": "vi_ascii_analyzer" },
 				"suggest": {
-					"type": "completion",
-					"contexts": [
-						{
-							"name": "tenant_context",
-							"type": "category",
-							"path": "tenant_id"
-						}
-					]
+					"type": "text",
+					"analyzer": "autocomplete_analyzer",
+					"search_analyzer": "vi_ascii_analyzer"
 				}
 			}
 		}
 	}`
 
+	log.Printf("[OpenSearch] Creating index %s...", indexName)
 	createReq := opensearchapi.IndicesCreateRequest{
 		Index: indexName,
 		Body:  strings.NewReader(mapping),
 	}
-	cRes, err := createReq.Do(ctx, idx.client)
-	if err == nil {
-		cRes.Body.Close()
+	cRes, cErr := createReq.Do(ctx, idx.client)
+	if cErr != nil {
+		log.Printf("[OpenSearch] Failed to create index %s: %v", indexName, cErr)
+		return
+	}
+	defer cRes.Body.Close()
+
+	if cRes.IsError() {
+		bodyBytes, _ := io.ReadAll(cRes.Body)
+		log.Printf("[OpenSearch] Failed to create index %s. Response error: %s", indexName, string(bodyBytes))
+		return
 	}
 
+	log.Printf("[OpenSearch] Creating alias %s -> %s...", aliasName, indexName)
 	aliasBody := fmt.Sprintf(`{"actions": [{"add": {"index": "%s", "alias": "%s"}}]}`, indexName, aliasName)
 	aliasReq := opensearchapi.IndicesUpdateAliasesRequest{Body: strings.NewReader(aliasBody)}
-	aRes, err := aliasReq.Do(ctx, idx.client)
-	if err == nil {
-		aRes.Body.Close()
+	aRes, aErr := aliasReq.Do(ctx, idx.client)
+	if aErr != nil {
+		log.Printf("[OpenSearch] Failed to create alias %s -> %s: %v", aliasName, indexName, aErr)
+		return
+	}
+	defer aRes.Body.Close()
+
+	if aRes.IsError() {
+		bodyBytes, _ := io.ReadAll(aRes.Body)
+		log.Printf("[OpenSearch] Failed to update alias. Response error: %s", string(bodyBytes))
+	} else {
+		log.Printf("[OpenSearch] Successfully configured index %s and alias %s.", indexName, aliasName)
 	}
 }
 
 func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error) {
-	// Build OpenSearch JSON query
+	var innerQuery map[string]interface{}
+	trimmedQuery := strings.TrimSpace(query)
+	if trimmedQuery == "" {
+		innerQuery = map[string]interface{}{
+			"bool": map[string]interface{}{
+				"must": []interface{}{
+					map[string]interface{}{
+						"term": map[string]interface{}{
+							"tenant_id": tenantID,
+						},
+					},
+					map[string]interface{}{
+						"match_all": map[string]interface{}{},
+					},
+				},
+			},
+		}
+	} else {
+		// Split query into terms to implement robust cross-field minimum-should-match search
+		// across fields with different languages/analyzers.
+		words := strings.Fields(trimmedQuery)
+		termClauses := make([]interface{}, 0, len(words))
+		for _, word := range words {
+			termClauses = append(termClauses, map[string]interface{}{
+				"multi_match": map[string]interface{}{
+					"query": word,
+					"fields": []string{
+						"product_name_vi^2.0",
+						"product_name_en^1.5",
+						"product_name_th^1.5",
+						"description_vi^0.8",
+						"description_en^0.8",
+						"description_th^0.8",
+						"brand^1.0",
+						"search_tags^1.0",
+					},
+					"type": "best_fields",
+				},
+			})
+		}
+
+		innerQuery = map[string]interface{}{
+			"bool": map[string]interface{}{
+				"must": []interface{}{
+					map[string]interface{}{
+						"term": map[string]interface{}{
+							"tenant_id": tenantID,
+						},
+					},
+				},
+				"should": []interface{}{
+					map[string]interface{}{
+						"bool": map[string]interface{}{
+							"should":               termClauses,
+							"minimum_should_match": "2<-1 5<-2",
+						},
+					},
+					map[string]interface{}{
+						"match_phrase": map[string]interface{}{
+							"product_name_vi": map[string]interface{}{
+								"query": trimmedQuery,
+								"boost": 4.0,
+							},
+						},
+					},
+					map[string]interface{}{
+						"match_phrase": map[string]interface{}{
+							"product_name_en": map[string]interface{}{
+								"query": trimmedQuery,
+								"boost": 3.0,
+							},
+						},
+					},
+					map[string]interface{}{
+						"match_phrase": map[string]interface{}{
+							"product_name_th": map[string]interface{}{
+								"query": trimmedQuery,
+								"boost": 3.0,
+							},
+						},
+					},
+				},
+				"minimum_should_match": 1,
+			},
+		}
+	}
+
 	queryObj := map[string]interface{}{
 		"from": from,
 		"size": size,
 		"query": map[string]interface{}{
 			"function_score": map[string]interface{}{
-				"query": map[string]interface{}{
-					"bool": map[string]interface{}{
-						"must": []interface{}{
-							map[string]interface{}{
-								"term": map[string]interface{}{
-									"tenant_id": tenantID,
-								},
-							},
-						},
-						"should": []interface{}{
-							map[string]interface{}{
-								"multi_match": map[string]interface{}{
-									"query": query,
-									"fields": []string{
-										"product_name_vi^2.0",
-										"product_name_en^1.5",
-										"product_name_th^1.5",
-										"description_vi^0.8",
-										"description_en^0.8",
-										"description_th^0.8",
-										"brand^1.0",
-										"search_tags^1.0",
-									},
-									"type": "best_fields",
-								},
-							},
-							map[string]interface{}{
-								"match_phrase": map[string]interface{}{
-									"product_name_vi": map[string]interface{}{
-										"query": query,
-										"boost": 4.0,
-									},
-								},
-							},
-							map[string]interface{}{
-								"match_phrase": map[string]interface{}{
-									"product_name_en": map[string]interface{}{
-										"query": query,
-										"boost": 3.0,
-									},
-								},
-							},
-							map[string]interface{}{
-								"match_phrase": map[string]interface{}{
-									"product_name_th": map[string]interface{}{
-										"query": query,
-										"boost": 3.0,
-									},
-								},
-							},
-						},
-						"minimum_should_match": 1,
-					},
-				},
+				"query": innerQuery,
 				"functions": []interface{}{
 					map[string]interface{}{
 						"filter": map[string]interface{}{
@@ -254,4 +384,96 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 	}
 
 	return products, searchResponse.Hits.Total.Value, nil
+}
+
+func (idx *opensearchIndexer) SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
+	suggestQuery := map[string]interface{}{
+		"_source": []string{"id", "brand", "price", "product_name_vi", "product_name_en", "product_name_th", "image_url", "inventory"},
+		"size":    10,
+		"query": map[string]interface{}{
+			"bool": map[string]interface{}{
+				"must": []interface{}{
+					map[string]interface{}{
+						"term": map[string]interface{}{
+							"tenant_id": tenantID,
+						},
+					},
+					map[string]interface{}{
+						"match": map[string]interface{}{
+							"suggest": map[string]interface{}{
+								"query":    query,
+								"operator": "and",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(suggestQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	req := opensearchapi.SearchRequest{
+		Index: []string{"products"},
+		Body:  strings.NewReader(string(bodyBytes)),
+	}
+
+	res, err := req.Do(ctx, idx.client)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		errBytes, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("opensearch suggest error: %s", string(errBytes))
+	}
+
+	var suggestResponse struct {
+		Hits struct {
+			Hits []struct {
+				Source struct {
+					ID            string  `json:"id"`
+					Brand         string  `json:"brand"`
+					Price         float64 `json:"price"`
+					ProductNameVI string  `json:"product_name_vi"`
+					ProductNameEN string  `json:"product_name_en"`
+					ProductNameTH string  `json:"product_name_th"`
+					ImageURL      string  `json:"image_url"`
+					Inventory     int     `json:"inventory"`
+				} `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+
+	if err := json.NewDecoder(res.Body).Decode(&suggestResponse); err != nil {
+		return nil, err
+	}
+
+	uniqueSuggestions := make([]entity.Suggestion, 0, len(suggestResponse.Hits.Hits))
+	seen := make(map[string]bool)
+	for _, hit := range suggestResponse.Hits.Hits {
+		val := strings.TrimSpace(hit.Source.ProductNameVI)
+		if val != "" && !seen[val] {
+			seen[val] = true
+
+			suggestion := entity.Suggestion{
+				ID:            hit.Source.ID,
+				Text:          val,
+				Brand:         hit.Source.Brand,
+				Price:         hit.Source.Price,
+				ProductNameVI: hit.Source.ProductNameVI,
+				ProductNameEN: hit.Source.ProductNameEN,
+				ProductNameTH: hit.Source.ProductNameTH,
+				ImageURL:      hit.Source.ImageURL,
+				Inventory:     hit.Source.Inventory,
+			}
+			uniqueSuggestions = append(uniqueSuggestions, suggestion)
+		}
+	}
+
+	return uniqueSuggestions, nil
 }

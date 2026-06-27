@@ -28,7 +28,7 @@ func (r *searchRepository) SaveTranslation(ctx context.Context, t *entity.Produc
 func (r *searchRepository) SaveSyncJob(ctx context.Context, job *entity.SearchSyncJob) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "product_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"status", "error_message", "retry_count", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"status", "error_message", "retry_count", "text_hash", "updated_at"}),
 	}).Create(job).Error
 }
 

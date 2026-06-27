@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log"
+	"search-service/internal/entity"
 	"strings"
 	"time"
 )
@@ -12,6 +13,8 @@ import (
 type SearchService interface {
 	Search(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, error)
 	TrackClick(ctx context.Context, tenantID, searchLogID, productID, query string, position int) error
+	Suggest(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
+	GetProductByID(ctx context.Context, tenantID, productID string) (*entity.Product, error)
 }
 
 type AnalyticsRepository interface {
@@ -23,13 +26,15 @@ type searchService struct {
 	indexer   ProductIndexer
 	cache     ProductCache
 	analytics AnalyticsRepository
+	repo      SearchRepository
 }
 
-func NewSearchService(indexer ProductIndexer, cache ProductCache, analytics AnalyticsRepository) SearchService {
+func NewSearchService(indexer ProductIndexer, cache ProductCache, analytics AnalyticsRepository, repo SearchRepository) SearchService {
 	return &searchService{
 		indexer:   indexer,
 		cache:     cache,
 		analytics: analytics,
+		repo:      repo,
 	}
 }
 
@@ -90,10 +95,51 @@ func (s *searchService) TrackClick(ctx context.Context, tenantID, searchLogID, p
 	return s.analytics.SaveClickLog(ctx, searchLogID, tenantID, query, productID, position)
 }
 
+func (s *searchService) Suggest(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
+	normalized := strings.ToLower(strings.TrimSpace(query))
+	if len(normalized) < 2 {
+		return []entity.Suggestion{}, nil
+	}
+
+	cached, found, err := s.cache.GetCachedSuggestions(ctx, tenantID, normalized)
+	if err == nil && found {
+		return cached, nil
+	}
+	if err != nil {
+		log.Printf("failed to get cached suggestions: %v", err)
+	}
+
+	suggestions, err := s.indexer.SuggestProducts(ctx, tenantID, normalized)
+	if err != nil {
+		log.Printf("failed to get suggestions from indexer: %v", err)
+		return []entity.Suggestion{}, nil
+	}
+
+	if err := s.cache.CacheSuggestions(ctx, tenantID, normalized, suggestions); err != nil {
+		log.Printf("failed to cache suggestions: %v", err)
+	}
+
+	return suggestions, nil
+}
+
 func (s *searchService) newUUID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
+
+func (s *searchService) GetProductByID(ctx context.Context, tenantID, productID string) (*entity.Product, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not configured")
+	}
+	p, err := s.repo.GetProductByID(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	if p.TenantID != tenantID {
+		return nil, fmt.Errorf("product not found under this tenant")
+	}
+	return p, nil
 }

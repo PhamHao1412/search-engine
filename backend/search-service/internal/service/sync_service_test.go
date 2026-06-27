@@ -93,9 +93,11 @@ func (m *MockSearchRepository) GetAllProductsByTenantID(ctx context.Context, ten
 
 // MockProductIndexer implements service.ProductIndexer
 type MockProductIndexer struct {
-	IndexProductFn   func(ctx context.Context, doc map[string]interface{}, productID string) error
-	SearchProductsFn func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error)
-	IndexedDocs      map[string]map[string]interface{}
+	IndexProductFn    func(ctx context.Context, doc map[string]interface{}, productID string) error
+	UpdateProductFn   func(ctx context.Context, doc map[string]interface{}, productID string) error
+	SearchProductsFn  func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error)
+	SuggestProductsFn func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
+	IndexedDocs       map[string]map[string]interface{}
 }
 
 func NewMockProductIndexer() *MockProductIndexer {
@@ -112,6 +114,19 @@ func (m *MockProductIndexer) IndexProduct(ctx context.Context, doc map[string]in
 	return nil
 }
 
+func (m *MockProductIndexer) UpdateProduct(ctx context.Context, doc map[string]interface{}, productID string) error {
+	if m.IndexedDocs[productID] == nil {
+		m.IndexedDocs[productID] = make(map[string]interface{})
+	}
+	for k, v := range doc {
+		m.IndexedDocs[productID][k] = v
+	}
+	if m.UpdateProductFn != nil {
+		return m.UpdateProductFn(ctx, doc, productID)
+	}
+	return nil
+}
+
 func (m *MockProductIndexer) EnsureIndex(ctx context.Context) {}
 
 func (m *MockProductIndexer) SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error) {
@@ -121,11 +136,20 @@ func (m *MockProductIndexer) SearchProducts(ctx context.Context, tenantID, query
 	return nil, 0, nil
 }
 
+func (m *MockProductIndexer) SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
+	if m.SuggestProductsFn != nil {
+		return m.SuggestProductsFn(ctx, tenantID, query)
+	}
+	return nil, nil
+}
+
 // MockProductCache implements service.ProductCache
 type MockProductCache struct {
-	CacheProductFn    func(ctx context.Context, tenantID, productID string, data map[string]interface{}) error
-	GetCachedSearchFn func(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error)
-	CacheSearchFn     func(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
+	CacheProductFn         func(ctx context.Context, tenantID, productID string, data map[string]interface{}) error
+	GetCachedSearchFn      func(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error)
+	CacheSearchFn          func(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
+	GetCachedSuggestionsFn func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error)
+	CacheSuggestionsFn     func(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error
 }
 
 func (m *MockProductCache) CacheProduct(ctx context.Context, tenantID, productID string, data map[string]interface{}) error {
@@ -145,6 +169,20 @@ func (m *MockProductCache) GetCachedSearch(ctx context.Context, tenantID, query 
 func (m *MockProductCache) CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error {
 	if m.CacheSearchFn != nil {
 		return m.CacheSearchFn(ctx, tenantID, query, page, pageSize, data, total, searchLogID)
+	}
+	return nil
+}
+
+func (m *MockProductCache) GetCachedSuggestions(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error) {
+	if m.GetCachedSuggestionsFn != nil {
+		return m.GetCachedSuggestionsFn(ctx, tenantID, query)
+	}
+	return nil, false, nil
+}
+
+func (m *MockProductCache) CacheSuggestions(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error {
+	if m.CacheSuggestionsFn != nil {
+		return m.CacheSuggestionsFn(ctx, tenantID, query, suggestions)
 	}
 	return nil
 }
@@ -392,5 +430,82 @@ func TestReprocessFailedJobs(t *testing.T) {
 	}
 	if job.RetryCount != 2 {
 		t.Errorf("Expected retry count to increment to 2, got %d", job.RetryCount)
+	}
+}
+
+func TestSyncProduct_TextHashCheck(t *testing.T) {
+	repo := NewMockSearchRepository()
+	indexer := NewMockProductIndexer()
+	cache := &MockProductCache{}
+
+	// Track calls
+	translateCalled := false
+	translator := &MockTranslationService{
+		TranslateFn: func(ctx context.Context, text, targetLang string) (string, error) {
+			translateCalled = true
+			return text + "_" + targetLang, nil
+		},
+	}
+
+	aiCalled := false
+	tagsGen := &MockTagGenerator{
+		GenerateSearchTagsFn: func(ctx context.Context, name, description string) ([]string, error) {
+			aiCalled = true
+			return []string{"keyboard"}, nil
+		},
+	}
+
+	syncSvc := service.NewSyncService(repo, indexer, cache, translator, tagsGen)
+
+	product := entity.Product{
+		ID:               "prod-123",
+		TenantID:         "tenant-abc",
+		Name:             "Bàn phím cơ",
+		Description:      "Bàn phím cơ giá rẻ",
+		Price:            50.0,
+		Inventory:        100,
+		OriginalLanguage: "vi",
+	}
+
+	// 1st sync (full flow)
+	err := syncSvc.SyncProduct(context.Background(), product)
+	if err != nil {
+		t.Fatalf("1st sync failed: %v", err)
+	}
+
+	if !translateCalled || !aiCalled {
+		t.Error("Expected translate and AI to be called on first sync")
+	}
+
+	// Reset tracking
+	translateCalled = false
+	aiCalled = false
+
+	// Update non-text fields (inventory and price)
+	product.Inventory = 99
+	product.Price = 45.0
+
+	// Track UpdateProduct call
+	updateCalled := false
+	indexer.UpdateProductFn = func(ctx context.Context, doc map[string]interface{}, productID string) error {
+		updateCalled = true
+		if doc["inventory"] != 99 || doc["price"] != 45.0 {
+			t.Errorf("Expected inventory=99 and price=45.0 in update payload, got: %v", doc)
+		}
+		return nil
+	}
+
+	// 2nd sync (should use partial update since text is identical)
+	err = syncSvc.SyncProduct(context.Background(), product)
+	if err != nil {
+		t.Fatalf("2nd sync failed: %v", err)
+	}
+
+	if translateCalled || aiCalled {
+		t.Error("Expected translate and AI to be skipped on duplicate text hash")
+	}
+
+	if !updateCalled {
+		t.Error("Expected UpdateProduct to be called instead of IndexProduct")
 	}
 }

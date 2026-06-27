@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"search-service/internal/entity"
 	"search-service/internal/service"
 )
 
@@ -50,7 +51,7 @@ func TestSearchService_CacheHit(t *testing.T) {
 		return nil, 0, nil
 	}
 
-	svc := service.NewSearchService(indexer, cache, analytics)
+	svc := service.NewSearchService(indexer, cache, analytics, nil)
 	res, total, searchLogID, err := svc.Search(context.Background(), "tenant-1", "test-query", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -107,7 +108,7 @@ func TestSearchService_CacheMiss(t *testing.T) {
 		return nil
 	}
 
-	svc := service.NewSearchService(indexer, cache, analytics)
+	svc := service.NewSearchService(indexer, cache, analytics, nil)
 	res, total, _, err := svc.Search(context.Background(), "tenant-1", "test-query", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -151,7 +152,7 @@ func TestSearchService_Normalization(t *testing.T) {
 		return nil, 0, nil
 	}
 
-	svc := service.NewSearchService(indexer, cache, analytics)
+	svc := service.NewSearchService(indexer, cache, analytics, nil)
 	_, _, _, err := svc.Search(context.Background(), "tenant-1", "   Ca   phe   Sua   ", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -163,7 +164,7 @@ func TestSearchService_QueryLengthLimit(t *testing.T) {
 	cache := &MockProductCache{}
 	analytics := &MockAnalyticsRepository{}
 
-	svc := service.NewSearchService(indexer, cache, analytics)
+	svc := service.NewSearchService(indexer, cache, analytics, nil)
 	longQuery := strings.Repeat("a", 101)
 	_, _, _, err := svc.Search(context.Background(), "tenant-1", longQuery, 1, 20)
 	if err == nil {
@@ -189,7 +190,7 @@ func TestSearchService_TrackClick(t *testing.T) {
 		return nil
 	}
 
-	svc := service.NewSearchService(indexer, cache, analytics)
+	svc := service.NewSearchService(indexer, cache, analytics, nil)
 
 	// Test valid case
 	err := svc.TrackClick(context.Background(), "tenant-1", "log-123", "prod-456", "coffee", 2)
@@ -204,5 +205,103 @@ func TestSearchService_TrackClick(t *testing.T) {
 	err = svc.TrackClick(context.Background(), "tenant-1", "log-123", "prod-456", "coffee", 0)
 	if err == nil {
 		t.Fatal("Expected error for invalid position <= 0, got nil")
+	}
+}
+
+func TestSearchService_Suggest_CacheHit(t *testing.T) {
+	indexer := NewMockProductIndexer()
+	cache := &MockProductCache{}
+	analytics := &MockAnalyticsRepository{}
+
+	// Setup Cache Hit
+	cachedSuggestions := []entity.Suggestion{
+		{ID: "p-1", Text: "Bàn phím cơ Akko", Brand: "Akko", Price: 150000},
+		{ID: "p-2", Text: "Bàn phím cơ Ajazz", Brand: "Ajazz", Price: 80000},
+	}
+	cache.GetCachedSuggestionsFn = func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error) {
+		if tenantID != "tenant-1" || query != "ban" {
+			t.Errorf("Unexpected cache hit query params: tenantID=%s, query=%s", tenantID, query)
+		}
+		return cachedSuggestions, true, nil
+	}
+
+	// Verify Indexer is NOT called
+	indexer.SuggestProductsFn = func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
+		t.Fatal("Indexer should not be called on cache hit")
+		return nil, nil
+	}
+
+	svc := service.NewSearchService(indexer, cache, analytics, nil)
+	res, err := svc.Suggest(context.Background(), "tenant-1", "ban")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(res) != 2 || res[0].Text != "Bàn phím cơ Akko" {
+		t.Errorf("Unexpected suggestions: %v", res)
+	}
+}
+
+func TestSearchService_Suggest_CacheMiss(t *testing.T) {
+	indexer := NewMockProductIndexer()
+	cache := &MockProductCache{}
+	analytics := &MockAnalyticsRepository{}
+
+	// Setup Cache Miss
+	cache.GetCachedSuggestionsFn = func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error) {
+		return nil, false, nil
+	}
+
+	// Mock Indexer call
+	indexedSuggestions := []entity.Suggestion{
+		{ID: "p-3", Text: "Logitech G Pro", Brand: "Logitech", Price: 3190000},
+		{ID: "p-4", Text: "Logitech MX Master", Brand: "Logitech", Price: 2490000},
+	}
+	indexer.SuggestProductsFn = func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
+		if tenantID != "tenant-1" || query != "logi" {
+			t.Errorf("Unexpected indexer query params: tenantID=%s, query=%s", tenantID, query)
+		}
+		return indexedSuggestions, nil
+	}
+
+	// Mock Cache Set
+	var cacheSetCalled bool
+	cache.CacheSuggestionsFn = func(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error {
+		cacheSetCalled = true
+		if len(suggestions) != 2 || suggestions[0].Text != "Logitech G Pro" {
+			t.Errorf("Unexpected cached suggestions: %v", suggestions)
+		}
+		return nil
+	}
+
+	svc := service.NewSearchService(indexer, cache, analytics, nil)
+	res, err := svc.Suggest(context.Background(), "tenant-1", "logi")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(res) != 2 || res[0].Text != "Logitech G Pro" {
+		t.Errorf("Unexpected suggestions: %v", res)
+	}
+
+	if !cacheSetCalled {
+		t.Error("Expected CacheSuggestions to be called")
+	}
+}
+
+func TestSearchService_Suggest_ShortQuery(t *testing.T) {
+	indexer := NewMockProductIndexer()
+	cache := &MockProductCache{}
+	analytics := &MockAnalyticsRepository{}
+
+	svc := service.NewSearchService(indexer, cache, analytics, nil)
+
+	// Short query (< 2 characters) should immediately return empty results without hitting cache/indexer
+	res, err := svc.Suggest(context.Background(), "tenant-1", "a")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if len(res) != 0 {
+		t.Errorf("Expected 0 suggestions for short query, got: %v", res)
 	}
 }

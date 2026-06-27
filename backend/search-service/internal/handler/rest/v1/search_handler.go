@@ -94,6 +94,25 @@ func (h *SearchHandler) SyncAll(c *gin.Context) {
 	})
 }
 
+func (h *SearchHandler) Suggest(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	query := c.Query("q")
+	suggestions, err := h.searchSvc.Suggest(c.Request.Context(), tenantID, query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get suggestions: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"suggestions": suggestions,
+	})
+}
+
 type ClickTrackRequest struct {
 	SearchLogID string `json:"search_log_id" binding:"required"`
 	ProductID   string `json:"product_id" binding:"required"`
@@ -129,4 +148,26 @@ func (h *SearchHandler) TrackClick(c *gin.Context) {
 	}()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func (h *SearchHandler) GetProductByID(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "product ID is required"})
+		return
+	}
+
+	product, err := h.searchSvc.GetProductByID(c.Request.Context(), tenantID, id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("product not found: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, product)
 }

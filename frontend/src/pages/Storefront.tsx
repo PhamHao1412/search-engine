@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Search, 
   SlidersHorizontal, 
@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import { useTenant } from '../context/TenantContext';
 import { searchApi, getSearchDebugInfo } from '../services/api';
-import { Product, SearchDebugInfo } from '../types';
+import { Product, SearchDebugInfo, Suggestion } from '../types';
+import Footer from '../components/Footer';
 
 const HOT_SUGGESTIONS: Record<string, string[]> = {
   'd3b07384-d113-4956-a5db-251d50c18d01': [
@@ -36,11 +37,13 @@ const HOT_SUGGESTIONS: Record<string, string[]> = {
 
 const Storefront: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlQuery = searchParams.get('q') || '';
+  const urlProductId = searchParams.get('productId') || '';
   const { activeTenant } = useTenant();
 
   // Search & Results States
-  const [query, setQuery] = useState('');
-  const [activeSearch, setActiveSearch] = useState('');
+  const [query, setQuery] = useState(urlQuery);
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -48,6 +51,12 @@ const Storefront: React.FC = () => {
   const [searchLogId, setSearchLogId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Suggestions States
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Filter States
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
@@ -66,23 +75,45 @@ const Storefront: React.FC = () => {
 
   // Simulation state for Redis Cache
   const searchHistoryRef = useRef<Set<string>>(new Set());
+  const prevTenantId = useRef(activeTenant.id);
 
-  // Trigger search on mount and when query or page changes
+  // Sync input value with URL parameter
   useEffect(() => {
-    handleSearch(activeSearch, page);
-  }, [activeSearch, page, activeTenant.id]);
+    setQuery(urlQuery);
+    setPage(1);
+  }, [urlQuery]);
 
-  // Debounce the query state and update activeSearch to trigger search automatically while typing
+  // Trigger search when query parameter, page, or tenant changes
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setPage(1);
-      setActiveSearch(query);
-    }, 300); // 300ms delay
+    handleSearch(urlQuery, page);
+  }, [urlQuery, page, activeTenant.id]);
 
-    return () => {
-      clearTimeout(handler);
+  // Debounce API call for autocomplete suggestions
+  useEffect(() => {
+    const cleanQuery = query.trim();
+    if (cleanQuery.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    const handler = setTimeout(async () => {
+      const results = await searchApi.getSuggestions(cleanQuery, activeTenant.id);
+      setSuggestions(results);
+    }, 150); // 150ms debounce delay as per BR-001
+
+    return () => clearTimeout(handler);
+  }, [query, activeTenant.id]);
+
+  // Click outside to close dropdown suggestions list
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
     };
-  }, [query]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Extract unique brands whenever products load
   useEffect(() => {
@@ -96,16 +127,43 @@ const Storefront: React.FC = () => {
     }
   }, [products]);
 
+  // Auto-open product detail modal if productId is present in URL
+  useEffect(() => {
+    if (urlProductId && products.length > 0) {
+      const idx = products.findIndex(p => p.id === urlProductId);
+      if (idx !== -1) {
+        setSelectedProduct({ product: products[idx], index: idx });
+        
+        // Track the click automatically
+        const clickPayload = {
+          search_log_id: searchLogId || '00000000-0000-0000-0000-000000000000',
+          product_id: urlProductId,
+          query: urlQuery || '(rỗng)',
+          position: idx + 1,
+        };
+        searchApi.trackClick(clickPayload, activeTenant.id);
+
+        // Remove the productId from query parameters so modal can be closed without reopening
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('productId');
+        setSearchParams(newParams, { replace: true });
+      }
+    }
+  }, [urlProductId, products, searchLogId, urlQuery, activeTenant.id, searchParams, setSearchParams]);
+
   // Reset filters when tenant changes
   useEffect(() => {
-    setQuery('');
-    setActiveSearch('');
-    setSelectedBrands([]);
-    setMinPrice('');
-    setMaxPrice('');
-    setInStockOnly(false);
-    setPage(1);
-  }, [activeTenant.id]);
+    if (prevTenantId.current !== activeTenant.id) {
+      prevTenantId.current = activeTenant.id;
+      setQuery('');
+      setSearchParams({});
+      setSelectedBrands([]);
+      setMinPrice('');
+      setMaxPrice('');
+      setInStockOnly(false);
+      setPage(1);
+    }
+  }, [activeTenant.id, setSearchParams]);
 
   const handleSearch = async (searchTerm: string, targetPage: number) => {
     setLoading(true);
@@ -148,27 +206,54 @@ const Storefront: React.FC = () => {
   const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    setActiveSearch(query);
+    setShowSuggestions(false);
+    setSearchParams({ q: query.trim() });
   };
 
-  const handleSuggestionClick = (keyword: string) => {
+  const handleSuggestionClick = (suggestion: Suggestion) => {
+    setQuery(suggestion.text);
+    setShowSuggestions(false);
+    navigate(`/products/${suggestion.id}`);
+  };
+
+  const handleHotSuggestionClick = (keyword: string) => {
     setQuery(keyword);
     setPage(1);
-    setActiveSearch(keyword);
+    setShowSuggestions(false);
+    setSearchParams({ q: keyword.trim() });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((prev) => (prev + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && activeIndex < suggestions.length) {
+        e.preventDefault();
+        handleSuggestionClick(suggestions[activeIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setActiveIndex(-1);
+    }
   };
 
   const handleProductClick = (product: Product, index: number) => {
-    setSelectedProduct({ product, index });
-
     // Click tracking payload: non-blocking API call
     const clickPayload = {
       search_log_id: searchLogId || '00000000-0000-0000-0000-000000000000',
       product_id: product.id,
-      query: activeSearch || '(rỗng)',
+      query: urlQuery || '(rỗng)',
       position: index + 1, // 1-indexed position
     };
     
     searchApi.trackClick(clickPayload, activeTenant.id);
+    navigate(`/products/${product.id}`);
   };
 
   // Helper to generate stars based on Product ID hashes for consistent visual quality
@@ -206,7 +291,7 @@ const Storefront: React.FC = () => {
     <div className="app-container">
       {/* HEADER SECTION */}
       <header className="header">
-        <div className="header-logo">
+        <div className="header-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <ShoppingBag className="text-gradient" size={26} strokeWidth={2.5} />
           <span>Amaze<span style={{ color: 'var(--primary)' }}>Search</span></span>
         </div>
@@ -246,37 +331,127 @@ const Storefront: React.FC = () => {
       </header>
 
       <main className="main-content">
-        {/* SEARCH CENTERPIECE AREA */}
-        <section className="search-centerpiece">
-          <h1 style={{ fontWeight: 800, fontSize: '2.2rem', marginBottom: '12px', textAlign: 'center', letterSpacing: '-0.03em' }}>
-            Tìm Kiếm Thông Minh Đa Ngôn Ngữ
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '32px', textAlign: 'center', fontSize: '0.95rem' }}>
-            Hệ thống tìm kiếm thông tin sản phẩm tức thì được cấp quyền bởi OpenSearch & Redis.
-          </p>
+        {/* COMPACT SEARCH AREA */}
+        <section className="search-centerpiece" style={{ padding: '24px 0 16px' }}>
+          <div ref={dropdownRef} style={{ position: 'relative', width: '100%', maxWidth: '600px', margin: '0 auto 16px' }}>
+            <form onSubmit={onSearchSubmit} className="search-box-wrapper" style={{ margin: 0 }}>
+              <input
+                type="text"
+                placeholder={`Tìm kiếm sản phẩm trong ${activeTenant.name}...`}
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setShowSuggestions(true);
+                  setActiveIndex(-1);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onKeyDown={handleKeyDown}
+                className="search-input"
+              />
+              <button type="submit" className="search-icon-btn">
+                <Search size={22} />
+              </button>
+            </form>
 
-          <form onSubmit={onSearchSubmit} className="search-box-wrapper">
-            <input
-              type="text"
-              placeholder={`Tìm kiếm sản phẩm trong ${activeTenant.name}...`}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="search-input"
-            />
-            <button type="submit" className="search-icon-btn">
-              <Search size={22} />
-            </button>
-          </form>
+            {/* Suggestions list Dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="autocomplete-dropdown" style={{
+                position: 'absolute',
+                top: '105%',
+                left: 0,
+                right: 0,
+                backgroundColor: '#ffffff',
+                border: '1px solid var(--border-color)',
+                borderRadius: '12px',
+                boxShadow: 'var(--shadow-lg), var(--shadow-premium)',
+                zIndex: 1000,
+                maxHeight: '300px',
+                overflowY: 'auto',
+                padding: '6px 0',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                {suggestions.map((suggestion, index) => {
+                  const isOutOfStock = suggestion.inventory <= 0;
+                  const translatedSubtitle = suggestion.product_name_en || '';
+
+                  return (
+                    <div
+                      key={suggestion.id || index}
+                      onClick={() => handleSuggestionClick(suggestion)}
+                      className="autocomplete-row-item"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '10px 16px',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s ease',
+                        backgroundColor: index === activeIndex ? 'var(--bg-tertiary)' : 'transparent',
+                        borderBottom: index < suggestions.length - 1 ? '1px solid var(--bg-secondary)' : 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (index !== activeIndex) {
+                          e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (index !== activeIndex) {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }
+                      }}
+                    >
+                      {/* Left: Product Thumbnail */}
+                      <div style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-tertiary)', borderRadius: '6px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border-color)' }}>
+                        {suggestion.image_url ? (
+                          <img
+                            src={suggestion.image_url}
+                            alt=""
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <Search size={18} style={{ color: 'var(--text-muted)' }} />
+                        )}
+                      </div>
+
+                      {/* Middle: Product info */}
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {suggestion.product_name_vi}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {suggestion.brand || 'Chưa phân loại'} {translatedSubtitle ? `• ${translatedSubtitle}` : ''}
+                        </span>
+                      </div>
+
+                      {/* Right: Price & Stock status */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)' }}>
+                          {suggestion.price.toLocaleString('vi-VN')}đ
+                        </span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 500, color: isOutOfStock ? 'var(--danger)' : 'var(--success)' }}>
+                          {isOutOfStock ? 'Hết hàng' : `Còn ${suggestion.inventory}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Hot Suggestions */}
-          <div className="search-suggestions">
+          <div className="search-suggestions" style={{ justifyContent: 'center' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500, marginRight: '4px' }}>
               <Sparkles size={14} style={{ color: 'var(--warning)' }} /> Từ khóa hot:
             </span>
             {HOT_SUGGESTIONS[activeTenant.id]?.map((suggest) => (
               <button
                 key={suggest}
-                onClick={() => handleSuggestionClick(suggest)}
+                onClick={() => handleHotSuggestionClick(suggest)}
                 className="suggestion-tag"
               >
                 {suggest}
@@ -365,8 +540,8 @@ const Storefront: React.FC = () => {
             {/* Header info */}
             <div className="product-results-header">
               <div>
-                <span>Tìm thấy <strong>{filteredProducts.length}</strong> sản phẩm</span>
-                {activeSearch && <span> cho từ khóa "<strong>{activeSearch}</strong>"</span>}
+                <span>Tìm thấy <strong>{total}</strong> kết quả (đã lọc: <strong>{filteredProducts.length}</strong>)</span>
+                {urlQuery && <span> cho từ khóa "<strong>{urlQuery}</strong>"</span>}
               </div>
               <div style={{ fontSize: '0.85rem' }}>
                 Tenant: <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{activeTenant.name}</span>
@@ -387,7 +562,7 @@ const Storefront: React.FC = () => {
                 <div className="empty-state-text" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Không thể hoàn thành tìm kiếm</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>{error}</div>
                 <button 
-                  onClick={() => handleSearch(activeSearch, page)} 
+                  onClick={() => handleSearch(urlQuery, page)} 
                   className="btn btn-primary" 
                   style={{ marginTop: '16px', padding: '8px 16px', fontSize: '0.85rem' }}
                 >
@@ -704,6 +879,7 @@ const Storefront: React.FC = () => {
           </div>
         </div>
       )}
+      <Footer />
     </div>
   );
 };

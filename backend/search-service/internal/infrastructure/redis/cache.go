@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"search-service/internal/entity"
 	"search-service/internal/service"
 
 	"github.com/redis/go-redis/v9"
@@ -66,4 +67,29 @@ func (c *redisCache) CacheSearch(ctx context.Context, tenantID, query string, pa
 		return err
 	}
 	return c.client.Set(ctx, redisKey, string(val), 10*time.Minute).Err()
+}
+
+func (c *redisCache) GetCachedSuggestions(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error) {
+	redisKey := fmt.Sprintf("suggest:%s:%s", tenantID, query)
+	val, err := c.client.Get(ctx, redisKey).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+
+	var suggestions []entity.Suggestion
+	if err := json.Unmarshal([]byte(val), &suggestions); err != nil {
+		return nil, false, err
+	}
+	return suggestions, true, nil
+}
+
+func (c *redisCache) CacheSuggestions(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error {
+	redisKey := fmt.Sprintf("suggest:%s:%s", tenantID, query)
+	val, err := json.Marshal(suggestions)
+	if err != nil {
+		return err
+	}
+	return c.client.Set(ctx, redisKey, string(val), 5*time.Minute).Err()
 }

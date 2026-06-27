@@ -52,6 +52,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect redis: %v", err)
 	}
+
+	// Clear Redis cache on startup
+	log.Println("Clearing Redis cache on startup...")
+	flushCtx, flushCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := redisClient.FlushDB(flushCtx).Err(); err != nil {
+		log.Printf("Warning: failed to clear Redis cache: %v", err)
+	} else {
+		log.Println("Successfully cleared Redis cache on startup.")
+	}
+	flushCancel()
+
 	productCache := redis.NewRedisCache(redisClient)
 
 	opensearchClient, err := opensearch.Connect(cfg.OpenSearchURL)
@@ -59,9 +70,6 @@ func main() {
 		log.Fatalf("failed to connect opensearch: %v", err)
 	}
 	productIndexer := opensearch.NewOpenSearchIndexer(opensearchClient)
-
-	// Ensure OpenSearch index and mappings exist
-	productIndexer.EnsureIndex(context.Background())
 
 	// Initialize GORM-based AnalyticsRepository
 	analyticsRepo := repository.NewAnalyticsRepository(dbConn)
@@ -71,7 +79,7 @@ func main() {
 	tagGenerator := ai.NewTagGenerator(cfg.OpenAIAPIKey, cfg.OpenAIModel)
 	syncSvc := service.NewSyncService(searchRepo, productIndexer, productCache, translator, tagGenerator)
 
-	searchSvc := service.NewSearchService(productIndexer, productCache, analyticsRepo)
+	searchSvc := service.NewSearchService(productIndexer, productCache, analyticsRepo, searchRepo)
 	searchHandler := v1.NewSearchHandler(searchSvc, syncSvc)
 
 	log.Printf("Initialized backend services: Database: %T, RedisCache: %T, OpenSearchIndexer: %T, AnalyticsRepository: %T, SyncService: %T\n", searchRepo, productCache, productIndexer, analyticsRepo, syncSvc)

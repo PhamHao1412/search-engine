@@ -51,3 +51,15 @@ export interface SearchDebugInfo {
   cacheStatus: 'HIT' | 'MISS';
   searchTime: number;
 }
+
+export interface Suggestion {
+  id: string;
+  text: string;
+  brand: string;
+  price: number;
+  product_name_vi: string;
+  product_name_en?: string;
+  product_name_th?: string;
+  image_url?: string;
+  inventory: number;
+}

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useTenant } from '../context/TenantContext';
 import { searchApi } from '../services/api';
+import Footer from '../components/Footer';
 
 interface SyncLog {
   timestamp: string;
@@ -400,6 +401,7 @@ const Admin: React.FC = () => {
 
         </div>
       </main>
+      <Footer />
     </div>
   );
 };
