@@ -243,13 +243,41 @@ export interface AISuggestion {
 }
 
 export const adminApi = {
+  async getTenants(): Promise<Array<{ id: string; name: string }>> {
+    const response = await fetch(`${BASE_URL}/admin/tenants`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch tenants: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.tenants || [];
+  },
+
   /**
    * Fetch AI suggestions for search optimization
    */
-  async getAISuggestions(tenantId: string, status = 'pending', type = ''): Promise<AISuggestion[]> {
-    const params = new URLSearchParams({ status });
+  async getAISuggestions(
+    tenantId: string,
+    status = 'pending',
+    type = '',
+    search = '',
+    page = 1,
+    pageSize = 5
+  ): Promise<{ suggestions: AISuggestion[]; total: number }> {
+    const params = new URLSearchParams({
+      status,
+      page: String(page),
+      page_size: String(pageSize),
+    });
     if (type) {
       params.append('type', type);
+    }
+    if (search) {
+      params.append('search', search);
     }
     const response = await fetch(`${BASE_URL}/admin/ai/suggestions?${params.toString()}`, {
       method: 'GET',
@@ -264,7 +292,10 @@ export const adminApi = {
     }
 
     const data = await response.json();
-    return data.suggestions || [];
+    return {
+      suggestions: data.suggestions || [],
+      total: data.total || 0,
+    };
   },
 
   /**

@@ -333,7 +333,7 @@ const Storefront: React.FC = () => {
 
           {/* Nav link to admin panel */}
           <button onClick={() => navigate('/admin')} className="btn btn-outline">
-            Bảng Quản Trị
+            Admin
             <ArrowRight size={16} />
           </button>
         </div>

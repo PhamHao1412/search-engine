@@ -77,6 +77,7 @@ frontend/
 2.  **Xử lý lỗi Google Translate**: Luồng đăng sản phẩm của Seller không được bị lỗi (crash/fail response) nếu API dịch thuật bên thứ ba gặp lỗi. Phải lưu Postgres thành công trước, sau đó xử lý dịch thuật bất đồng bộ ở Consumer. Nếu dịch lỗi, ghi nhận trạng thái và đưa vào hàng đợi thử lại (Kafka retry-topic).
 3.  **Search-time Synonym Expansion**: Không lưu từ đồng nghĩa vào document của sản phẩm lúc index. Mở rộng từ đồng nghĩa phải được thực hiện bằng cách viết lại câu query OR từ phía Search API thời điểm chạy tìm kiếm.
 4.  **Tối ưu hóa Spellcheck**: Spellcheck không được làm chậm luồng tìm kiếm. Sử dụng API `_msearch` của OpenSearch để gộp câu lệnh gợi ý chính tả và tìm kiếm sản phẩm vào chung một request mạng.
+5.  **Clean Parameter Signatures**: Đối với các hàm nhận từ 3 tham số trở lên (không tính `context.Context` hoặc receiver parameter), bắt buộc phải gom nhóm các tham số đó vào một struct duy nhất (ví dụ: `Params` hoặc `Request` struct) để đảm bảo chữ ký hàm sạch sẽ, dễ đọc và dễ mở rộng.
 
 ### B. Đối với Frontend (React)
 1.  **Debounce Autocomplete**: Bắt buộc phải cấu hình delay (debounce) tối thiểu 150ms khi gọi API Autocomplete từ ô tìm kiếm để bảo vệ tài nguyên hệ thống.

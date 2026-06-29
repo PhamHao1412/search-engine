@@ -161,26 +161,57 @@ func (gw *aiService) AnalyzeKeywords(ctx context.Context, keywords []string, ten
 	url := "https://api.openai.com/v1/chat/completions"
 
 	prompt := fmt.Sprintf(`You are an AI search dictionary optimizer. You are given a list of search queries that failed or had very low engagement in an e-commerce store, along with a context list of products currently sold in the store.
+
 Analyze these queries and suggest corrections: either spelling corrections (typos) or synonyms.
-Do not suggest corrections for queries that are correct or make no sense.
+
+Do not suggest corrections for queries that are correct, ambiguous, or make no sense.
 
 Guidelines to distinguish "suggestion_type":
-- "typo": Use this ONLY when the original query contains obvious spelling mistakes, character slips, missing letters, or missing tone marks/accents in Vietnamese (e.g., "chuot" -> "chuột", "bàn phim" -> "bàn phím", "ako" -> "akko", "logitek" -> "logitech"). The source and target are meant to be the exact same word, but the source is misspelled.
-- "synonym": Use this when the original query consists of correctly spelled words, but is an alternative term, synonym, translation, abbreviation, or related category for the products sold (e.g., "chuột gaming" -> "chuột chơi game", "keyboard" -> "bàn phím", "bàn phím bluetooth" -> "bàn phím không dây"). The source and target are different words/phrases that share the same meaning.
+
+* "typo": Use this ONLY when the source query and suggested value are intended to be the exact same word or entity, differing only by spelling mistakes, missing letters, extra letters, character slips, or missing tone marks/accents.
+
+* "synonym": Use this when the source query is an abbreviation, alias, prefix, truncated term, alternative name, translation, or related category term that refers to the same shopping intent. The source and target may be different words or different forms of the same entity.
+
+Important rules:
+
+1. Tenant Context Priority:
+   Before suggesting any correction, first determine whether the query could refer to a brand, product name, product category, or common shopping term present in the Tenant Context.
+
+2. Entity Name Accuracy:
+   When correcting queries that match or resemble brand names, product names, or categories present in the Tenant Context, always suggest the exact full name as written in the context (including its specific casing, capitalization, or camelCase formatting). Avoid correcting these specific names to generic dictionary words.
+
+3. Partial Match Handling:
+   Queries may be abbreviations, prefixes, shortened forms, truncated words, or incomplete search terms. Consider these valid signals of user intent when matching against entities in the Tenant Context.
+
+4. Correction Priority:
+   If multiple corrections are possible, prefer the correction that maps to an entity present in the Tenant Context. If no strong Tenant Context match exists, ignore the query instead of suggesting a generic dictionary correction.
+
+5. Strict Tenant Context Relevance:
+   ABSOLUTELY DO NOT suggest corrections or synonyms for search queries that are unrelated to the store's business domain, categories, brands, or products listed in the Tenant Context. If a search query is completely off-topic, ambiguous, or random text, ignore it and make no suggestion.
+
+6. Strong Evidence Requirement:
+   Only generate a suggestion when there is strong evidence that the query refers to a brand, category, product, or shopping term in the Tenant Context. Otherwise, ignore it.
+
+7. Existing Term Protection:
+   Do not generate a suggestion if the query already exactly matches a valid brand, category, product, or shopping term in the Tenant Context.
+
 
 Failed Search Queries:
 %s
 
-Products Context:
+Tenant Context:
 %s
 
 Your response must be a JSON object with a single field "suggestions" containing an array of suggestion objects.
+
 Each suggestion object must have the following fields:
-- "suggestion_type": Either "typo" or "synonym"
-- "source_value": The original search query
-- "suggested_value": The proposed correct search query or synonym
-- "confidence_score": A decimal number between 0.0 and 1.0 representing your confidence
-- "reason": A short explanation in English of why you made this suggestion`, strings.Join(keywords, ", "), tenantContext)
+
+* "suggestion_type": Either "typo" or "synonym"
+* "source_value": The original search query
+* "suggested_value": The proposed correct search query or synonym
+* "confidence_score": A decimal number between 0.0 and 1.0 representing your confidence
+* "reason": A short explanation in English of why you made this suggestion
+`, strings.Join(keywords, ", "), tenantContext)
 
 	reqBody, _ := json.Marshal(map[string]interface{}{
 		"model": gw.model,

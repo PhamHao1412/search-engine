@@ -157,17 +157,29 @@ func (r *searchRepository) SaveSearchSynonym(ctx context.Context, entry *entity.
 	}).Create(entry).Error
 }
 
-func (r *searchRepository) GetAISuggestions(ctx context.Context, tenantID, status, suggestionType string) ([]entity.AISuggestion, error) {
+func (r *searchRepository) GetAISuggestions(ctx context.Context, params service.GetAISuggestionsParams) ([]entity.AISuggestion, int64, error) {
 	var list []entity.AISuggestion
-	q := r.db.WithContext(ctx).Table("search_svc.ai_suggestions").Where("tenant_id = ?", tenantID)
-	if status != "" {
-		q = q.Where("status = ?", status)
+	var total int64
+
+	q := r.db.WithContext(ctx).Table("search_svc.ai_suggestions").Where("tenant_id = ?", params.TenantID)
+	if params.Status != "" {
+		q = q.Where("status = ?", params.Status)
 	}
-	if suggestionType != "" {
-		q = q.Where("suggestion_type = ?", suggestionType)
+	if params.SuggestionType != "" {
+		q = q.Where("suggestion_type = ?", params.SuggestionType)
 	}
-	err := q.Order("confidence_score DESC, created_at DESC").Find(&list).Error
-	return list, err
+	if params.Search != "" {
+		searchQuery := "%" + strings.ToLower(params.Search) + "%"
+		q = q.Where("LOWER(source_value) LIKE ? OR LOWER(suggested_value) LIKE ?", searchQuery, searchQuery)
+	}
+
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (params.Page - 1) * params.PageSize
+	err := q.Order("created_at DESC, id DESC").Offset(offset).Limit(params.PageSize).Find(&list).Error
+	return list, total, err
 }
 
 func (r *searchRepository) ApproveAISuggestion(ctx context.Context, tenantID, id string) (*entity.AISuggestion, error) {
@@ -286,4 +298,10 @@ func (r *searchRepository) GetTenantContextSummary(ctx context.Context, tenantID
 	}
 
 	return strings.Join(summaryParts, " | "), nil
+}
+
+func (r *searchRepository) GetAllTenants(ctx context.Context) ([]entity.Tenant, error) {
+	var list []entity.Tenant
+	err := r.db.WithContext(ctx).Order("name ASC").Find(&list).Error
+	return list, err
 }

@@ -115,7 +115,7 @@ const Home: React.FC = () => {
 
         <div className="header-actions">
           <button onClick={() => navigate('/admin')} className="btn btn-outline">
-            Bảng Quản Trị
+            Admin
             <ArrowRight size={16} />
           </button>
         </div>

@@ -118,3 +118,32 @@ func (c *redisCache) DeleteSpellcheckCache(ctx context.Context, tenantID, typoWo
 	redisKey := fmt.Sprintf("tenant:%s:spellcheck:%s", tenantID, typoWord)
 	return c.client.Del(ctx, redisKey).Err()
 }
+
+func (c *redisCache) DeleteTenantCache(ctx context.Context, tenantID string) error {
+	patterns := []string{
+		fmt.Sprintf("search:%s:*", tenantID),
+		fmt.Sprintf("suggest:%s:*", tenantID),
+		fmt.Sprintf("tenant:%s:spellcheck:*", tenantID),
+		fmt.Sprintf("tenant:%s:synonyms", tenantID),
+	}
+
+	for _, pattern := range patterns {
+		var cursor uint64
+		for {
+			keys, nextCursor, err := c.client.Scan(ctx, cursor, pattern, 100).Result()
+			if err != nil {
+				return err
+			}
+			if len(keys) > 0 {
+				if err := c.client.Del(ctx, keys...).Err(); err != nil {
+					return err
+				}
+			}
+			cursor = nextCursor
+			if cursor == 0 {
+				break
+			}
+		}
+	}
+	return nil
+}

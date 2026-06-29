@@ -18,6 +18,7 @@ func V1Router(r *gin.Engine, searchHandler *v1.SearchHandler, adminHandler *v1.A
 		c.JSON(200, gin.H{"message": "Spellcheck API - Under construction"})
 	})
 
+	apiV1.GET("/admin/tenants", adminHandler.GetTenants)
 	apiV1.GET("/admin/ai/suggestions", adminHandler.GetAISuggestions)
 	apiV1.POST("/admin/ai/suggestions/:id/approve", adminHandler.ApproveAISuggestion)
 	apiV1.POST("/admin/ai/suggestions/:id/reject", adminHandler.RejectAISuggestion)

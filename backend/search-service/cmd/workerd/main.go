@@ -83,6 +83,7 @@ func main() {
 		log.Fatalf("failed to cast tagGenerator to KeywordAnalyzer")
 	}
 	aiSvc := service.NewAISuggestionService(searchRepo, analyzer)
+	_ = aiSvc
 
 	// 5. Connect Kafka Consumer (Reader) and DLQ Publisher (Writer)
 	topic := "product-ingestion-events"
@@ -125,19 +126,19 @@ func main() {
 		log.Fatalf("failed to schedule reprocessor cron job: %v", err)
 	}
 
-	aiCronSched := os.Getenv("AI_SUGGESTION_CRON")
-	if aiCronSched == "" {
-		aiCronSched = "*/10 * * * *"
-	}
-	_, err = c.AddFunc(aiCronSched, func() {
-		log.Printf("[CronJob] Starting GenerateAISuggestions (schedule: %s)...\n", aiCronSched)
-		if err := aiSvc.GenerateAISuggestions(ctx); err != nil {
-			log.Printf("[CronJob] Error executing GenerateAISuggestions: %v\n", err)
-		}
-	})
-	if err != nil {
-		log.Fatalf("failed to schedule AI suggestion cron job: %v", err)
-	}
+	//aiCronSched := os.Getenv("AI_SUGGESTION_CRON")
+	//if aiCronSched == "" {
+	//	aiCronSched = "*/10 * * * *"
+	//}
+	//_, err = c.AddFunc(aiCronSched, func() {
+	//	log.Printf("[CronJob] Starting GenerateAISuggestions (schedule: %s)...\n", aiCronSched)
+	//	if err := aiSvc.GenerateAISuggestions(ctx); err != nil {
+	//		log.Printf("[CronJob] Error executing GenerateAISuggestions: %v\n", err)
+	//	}
+	//})
+	//if err != nil {
+	//	log.Fatalf("failed to schedule AI suggestion cron job: %v", err)
+	//}
 	c.Start()
 	defer c.Stop()
 

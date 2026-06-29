@@ -28,11 +28,12 @@ type MockSearchRepository struct {
 	UpdateAISuggestionStatusFn func(ctx context.Context, id, status string) error
 	SaveSpellcheckDictionaryFn func(ctx context.Context, entry *entity.SpellcheckDictionary) error
 	SaveSearchSynonymFn        func(ctx context.Context, entry *entity.SearchSynonym) error
-	GetAISuggestionsFn         func(ctx context.Context, tenantID, status, suggestionType string) ([]entity.AISuggestion, error)
+	GetAISuggestionsFn         func(ctx context.Context, params service.GetAISuggestionsParams) ([]entity.AISuggestion, int64, error)
 	ApproveAISuggestionFn      func(ctx context.Context, tenantID, id string) (*entity.AISuggestion, error)
 	GetSpellcheckRulesFn       func(ctx context.Context, tenantID string) ([]entity.SpellcheckDictionary, error)
 	GetSearchSynonymsFn        func(ctx context.Context, tenantID string) ([]entity.SearchSynonym, error)
 	GetTenantContextSummaryFn  func(ctx context.Context, tenantID string) (string, error)
+	GetAllTenantsFn            func(ctx context.Context) ([]entity.Tenant, error)
 
 	SavedJobs         map[string]*entity.SearchSyncJob
 	SavedTranslations []*entity.ProductTranslation
@@ -168,11 +169,11 @@ func (m *MockSearchRepository) SaveSearchSynonym(ctx context.Context, entry *ent
 	return nil
 }
 
-func (m *MockSearchRepository) GetAISuggestions(ctx context.Context, tenantID, status, suggestionType string) ([]entity.AISuggestion, error) {
+func (m *MockSearchRepository) GetAISuggestions(ctx context.Context, params service.GetAISuggestionsParams) ([]entity.AISuggestion, int64, error) {
 	if m.GetAISuggestionsFn != nil {
-		return m.GetAISuggestionsFn(ctx, tenantID, status, suggestionType)
+		return m.GetAISuggestionsFn(ctx, params)
 	}
-	return nil, nil
+	return nil, 0, nil
 }
 
 func (m *MockSearchRepository) ApproveAISuggestion(ctx context.Context, tenantID, id string) (*entity.AISuggestion, error) {
@@ -201,6 +202,13 @@ func (m *MockSearchRepository) GetTenantContextSummary(ctx context.Context, tena
 		return m.GetTenantContextSummaryFn(ctx, tenantID)
 	}
 	return "", nil
+}
+
+func (m *MockSearchRepository) GetAllTenants(ctx context.Context) ([]entity.Tenant, error) {
+	if m.GetAllTenantsFn != nil {
+		return m.GetAllTenantsFn(ctx)
+	}
+	return nil, nil
 }
 
 // MockProductIndexer implements service.ProductIndexer
@@ -316,6 +324,10 @@ func (m *MockProductCache) CacheSpellcheck(ctx context.Context, tenantID, typoWo
 }
 
 func (m *MockProductCache) DeleteSpellcheckCache(ctx context.Context, tenantID, typoWord string) error {
+	return nil
+}
+
+func (m *MockProductCache) DeleteTenantCache(ctx context.Context, tenantID string) error {
 	return nil
 }
 

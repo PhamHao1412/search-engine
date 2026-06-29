@@ -129,7 +129,7 @@ const ProductDetail: React.FC = () => {
           </div>
 
           <button onClick={() => navigate('/admin')} className="btn btn-outline">
-            Bảng Quản Trị
+            Admin
           </button>
         </div>
       </header>

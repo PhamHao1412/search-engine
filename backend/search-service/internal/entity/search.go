@@ -147,3 +147,14 @@ type Suggestion struct {
 	ImageURL      string  `json:"image_url"`
 	Inventory     int     `json:"inventory"`
 }
+
+type Tenant struct {
+	ID        string    `gorm:"type:uuid;primaryKey" json:"id"`
+	Name      string    `gorm:"type:varchar(255);not null" json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (Tenant) TableName() string {
+	return "product_svc.tenants"
+}

@@ -2,8 +2,10 @@ package v1
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"search-service/internal/service"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,8 +33,29 @@ func (h *AdminHandler) GetAISuggestions(c *gin.Context) {
 
 	status := c.Query("status")
 	suggestionType := c.Query("type")
+	search := c.Query("search")
 
-	suggestions, err := h.repo.GetAISuggestions(c.Request.Context(), tenantID, status, suggestionType)
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "5")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize < 1 {
+		pageSize = 5
+	}
+
+	suggestions, total, err := h.repo.GetAISuggestions(c.Request.Context(), service.GetAISuggestionsParams{
+		TenantID:       tenantID,
+		Status:         status,
+		SuggestionType: suggestionType,
+		Search:         search,
+		Page:           page,
+		PageSize:       pageSize,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get AI suggestions: %v", err)})
 		return
@@ -40,6 +63,18 @@ func (h *AdminHandler) GetAISuggestions(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"suggestions": suggestions,
+		"total":       total,
+	})
+}
+
+func (h *AdminHandler) GetTenants(c *gin.Context) {
+	list, err := h.repo.GetAllTenants(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get tenants: %v", err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"tenants": list,
 	})
 }
 
@@ -62,10 +97,10 @@ func (h *AdminHandler) ApproveAISuggestion(c *gin.Context) {
 		return
 	}
 
-	// Invalidate spellcheck cache when approved
-	if sugg.SuggestionType == "typo" {
-		_ = h.cache.DeleteSpellcheckCache(c.Request.Context(), tenantID, sugg.SourceValue)
-	}
+	log.Printf("[Admin] Approved AI suggestion: %s -> %s (Type: %s, Tenant: %s)", sugg.SourceValue, sugg.SuggestedValue, sugg.SuggestionType, tenantID)
+
+	// Invalidate all tenant search, suggest, and dictionary caches when approved
+	_ = h.cache.DeleteTenantCache(c.Request.Context(), tenantID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",

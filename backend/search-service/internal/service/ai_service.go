@@ -31,7 +31,7 @@ func (s *aiSuggestionService) GenerateAISuggestions(ctx context.Context) error {
 
 	for _, tenantID := range tenants {
 		// Fetch top 50 zero-result queries
-		zeroQueries, err := s.repo.GetZeroResultQueries(ctx, tenantID, 50)
+		zeroQueries, err := s.repo.GetZeroResultQueries(ctx, tenantID, 100)
 		if err != nil {
 			log.Printf("[AISuggestionWorker] Failed to fetch zero-result queries for tenant %s: %v", tenantID, err)
 			continue

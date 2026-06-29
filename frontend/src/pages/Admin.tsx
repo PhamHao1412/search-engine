@@ -9,7 +9,14 @@ import {
   Clock, 
   Sparkles, 
   CheckCircle2, 
-  AlertTriangle 
+  AlertTriangle,
+  LayoutDashboard,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  TrendingUp,
+  AlertCircle,
+  HelpCircle
 } from 'lucide-react';
 import { useTenant } from '../context/TenantContext';
 import { searchApi, adminApi, AISuggestion } from '../services/api';
@@ -28,17 +35,36 @@ const Admin: React.FC = () => {
   const navigate = useNavigate();
   const { activeTenant, setActiveTenantById, tenants } = useTenant();
 
+  // Navigation & Layout states
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai-suggestions' | 'dictionaries' | 'sync'>('ai-suggestions');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   // Sync state
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [syncLogs, setSyncLogs] = useState<SyncLog[]>([]);
 
-  // AI Suggestions & Dictionaries live state
-  const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
+  // AI Suggestions lists and total counts from Backend (independent for Typo and Synonym tables)
+  const [typoSuggestions, setTypoSuggestions] = useState<AISuggestion[]>([]);
+  const [synonymSuggestions, setSynonymSuggestions] = useState<AISuggestion[]>([]);
+  const [typoTotal, setTypoTotal] = useState(0);
+  const [synonymTotal, setSynonymTotal] = useState(0);
+  const [loadingTypos, setLoadingTypos] = useState(false);
+  const [loadingSynonyms, setLoadingSynonyms] = useState(false);
+
+  // Dictionaries lists
   const [spellcheckRules, setSpellcheckRules] = useState<Array<{ id: string; typo_word: string; correct_word: string; status: string }>>([]);
   const [synonymRules, setSynonymRules] = useState<Array<{ id: string; keyword: string; synonym: string; status: string }>>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [loadingDictionaries, setLoadingDictionaries] = useState(false);
+
+  // Independent search & pagination states mapping directly to Backend params
+  const [typoStatus, setTypoStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [synonymStatus, setSynonymStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [typoSearch, setTypoSearch] = useState('');
+  const [synonymSearch, setSynonymSearch] = useState('');
+  const [typoPage, setTypoPage] = useState(1);
+  const [synonymPage, setSynonymPage] = useState(1);
+  const itemsPerPage = 5;
 
   // Load sync logs from localStorage on mount
   useEffect(() => {
@@ -52,15 +78,43 @@ const Admin: React.FC = () => {
     }
   }, []);
 
-  const fetchAISuggestions = async () => {
-    setLoadingSuggestions(true);
+  const fetchTypoSuggestions = async () => {
+    setLoadingTypos(true);
     try {
-      const data = await adminApi.getAISuggestions(activeTenant.id, 'pending');
-      setAiSuggestions(data);
+      const res = await adminApi.getAISuggestions(
+        activeTenant.id,
+        typoStatus,
+        'typo',
+        typoSearch,
+        typoPage,
+        itemsPerPage
+      );
+      setTypoSuggestions(res.suggestions);
+      setTypoTotal(res.total);
     } catch (e) {
-      console.error('Failed to fetch AI suggestions', e);
+      console.error('Failed to fetch Typo suggestions', e);
     } finally {
-      setLoadingSuggestions(false);
+      setLoadingTypos(false);
+    }
+  };
+
+  const fetchSynonymSuggestions = async () => {
+    setLoadingSynonyms(true);
+    try {
+      const res = await adminApi.getAISuggestions(
+        activeTenant.id,
+        synonymStatus,
+        'synonym',
+        synonymSearch,
+        synonymPage,
+        itemsPerPage
+      );
+      setSynonymSuggestions(res.suggestions);
+      setSynonymTotal(res.total);
+    } catch (e) {
+      console.error('Failed to fetch Synonym suggestions', e);
+    } finally {
+      setLoadingSynonyms(false);
     }
   };
 
@@ -79,26 +133,41 @@ const Admin: React.FC = () => {
     }
   };
 
-  // Fetch data on active tenant change
+  // Fetch data on active tenant, status, search keyword, or page index changes (Backend-driven)
   useEffect(() => {
-    fetchAISuggestions();
+    fetchTypoSuggestions();
+  }, [activeTenant.id, typoStatus, typoSearch, typoPage]);
+
+  useEffect(() => {
+    fetchSynonymSuggestions();
+  }, [activeTenant.id, synonymStatus, synonymSearch, synonymPage]);
+
+  useEffect(() => {
     fetchDictionaries();
   }, [activeTenant.id]);
 
-  const handleApproveSuggestion = async (id: string) => {
+  const handleApproveSuggestion = async (id: string, type: 'typo' | 'synonym') => {
     try {
       await adminApi.approveAISuggestion(id, activeTenant.id);
-      fetchAISuggestions();
+      if (type === 'typo') {
+        fetchTypoSuggestions();
+      } else {
+        fetchSynonymSuggestions();
+      }
       fetchDictionaries();
     } catch (e: any) {
       alert(`Phê duyệt thất bại: ${e.message || 'Lỗi hệ thống'}`);
     }
   };
 
-  const handleRejectSuggestion = async (id: string) => {
+  const handleRejectSuggestion = async (id: string, type: 'typo' | 'synonym') => {
     try {
       await adminApi.rejectAISuggestion(id, activeTenant.id);
-      fetchAISuggestions();
+      if (type === 'typo') {
+        fetchTypoSuggestions();
+      } else {
+        fetchSynonymSuggestions();
+      }
     } catch (e: any) {
       alert(`Từ chối thất bại: ${e.message || 'Lỗi hệ thống'}`);
     }
@@ -111,7 +180,10 @@ const Admin: React.FC = () => {
     setGeneratingSuggestions(true);
     try {
       await adminApi.generateAISuggestions(activeTenant.id);
-      await fetchAISuggestions();
+      // Reset tables page pointers and trigger reload
+      setTypoPage(1);
+      setSynonymPage(1);
+      await Promise.all([fetchTypoSuggestions(), fetchSynonymSuggestions()]);
     } catch (e: any) {
       alert(`Phân tích AI thất bại: ${e.message || 'Lỗi hệ thống'}`);
     } finally {
@@ -172,367 +244,762 @@ const Admin: React.FC = () => {
     localStorage.removeItem('search_sync_logs');
   };
 
+  // Pagination stats calculation
+  const totalTypoPages = Math.ceil(typoTotal / itemsPerPage) || 1;
+  const typoStartIndex = (typoPage - 1) * itemsPerPage;
+
+  const totalSynonymPages = Math.ceil(synonymTotal / itemsPerPage) || 1;
+  const synonymStartIndex = (synonymPage - 1) * itemsPerPage;
+
   return (
-    <div className="app-container">
-      {/* HEADER SECTION */}
-      <header className="header">
-        <div className="header-logo">
-          <Settings className="text-gradient" size={26} strokeWidth={2.5} />
-          <span>Amaze<span style={{ color: 'var(--primary)' }}>Search</span> <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-muted)' }}>Admin Panel</span></span>
+    <div className="admin-layout">
+      {/* COLLAPSIBLE SIDEBAR */}
+      <aside className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+        <div className="admin-sidebar-header">
+          <Settings className="text-gradient" size={26} strokeWidth={2.5} style={{ flexShrink: 0 }} />
+          <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em' }} className="admin-menu-text">
+            Amaze<span style={{ color: 'var(--primary)' }}>Search</span>
+          </span>
         </div>
 
-        <div className="header-actions">
-          <button onClick={() => navigate('/')} className="btn btn-outline">
-            <ArrowLeft size={16} />
-            Quay Lại Cửa Hàng
+        <button 
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          className="admin-sidebar-toggle"
+          title={sidebarCollapsed ? "Mở rộng menu" : "Thu gọn menu"}
+        >
+          {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+
+        <nav className="admin-sidebar-menu">
+          <button 
+            onClick={() => setActiveTab('dashboard')} 
+            className={`admin-menu-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+          >
+            <LayoutDashboard size={20} />
+            <span className="admin-menu-text">Dashboard</span>
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('ai-suggestions')} 
+            className={`admin-menu-item ${activeTab === 'ai-suggestions' ? 'active' : ''}`}
+          >
+            <Sparkles size={20} />
+            <span className="admin-menu-text">Đề xuất từ AI</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('dictionaries')} 
+            className={`admin-menu-item ${activeTab === 'dictionaries' ? 'active' : ''}`}
+          >
+            <BookOpen size={20} />
+            <span className="admin-menu-text">Từ điển hoạt động</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('sync')} 
+            className={`admin-menu-item ${activeTab === 'sync' ? 'active' : ''}`}
+          >
+            <RefreshCw size={20} />
+            <span className="admin-menu-text">Đồng bộ dữ liệu</span>
+          </button>
+        </nav>
+
+        <div style={{ marginTop: 'auto', padding: '16px' }} className="admin-menu-text">
+          <button 
+            onClick={() => navigate('/')} 
+            className="btn btn-outline" 
+            style={{ width: '100%', display: 'flex', gap: '8px', justifyContent: 'center' }}
+          >
+            <ArrowLeft size={14} />
+            Cửa hàng
           </button>
         </div>
-      </header>
+      </aside>
 
-      <main className="main-content">
-        <div style={{ marginBottom: '24px' }}>
-          <h1 style={{ fontWeight: 800, fontSize: '1.8rem', letterSpacing: '-0.02em', marginBottom: '4px' }}>
-            Hệ thống Quản trị Search Engine
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Cấu hình tenant hoạt động, đồng bộ sản phẩm từ cơ sở dữ liệu lên OpenSearch và theo dõi từ điển tìm kiếm.
-          </p>
-        </div>
+      {/* MAIN CONTAINER */}
+      <div className="admin-main">
+        {/* TOPBAR */}
+        <header className="admin-topbar">
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              {activeTab === 'dashboard' && 'Dashboard Analytics'}
+              {activeTab === 'ai-suggestions' && 'AI Suggestion Engine'}
+              {activeTab === 'dictionaries' && 'Active Search Dictionaries'}
+              {activeTab === 'sync' && 'Database Sync Controls'}
+            </h2>
+          </div>
 
-        {/* ADMIN GRID LAYOUT */}
-        <div className="admin-grid">
-          
-          {/* LEFT SIDEBAR: TENANT SWITCHER & SYNC PANEL */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            
-            {/* Tenant switcher manager */}
-            <section className="admin-card">
-              <div className="admin-card-title">
-                <Server size={18} style={{ color: 'var(--primary)' }} />
-                <span>Quản lý Tenant Active</span>
-              </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Thay đổi Tenant sẽ lập tức chuyển đổi phạm vi index tìm kiếm trên trang mua sắm.
-              </p>
+          {/* Tenant Switcher in Topbar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Server size={16} style={{ color: 'var(--text-muted)' }} />
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Cửa hàng hoạt động:
+            </span>
+            <select 
+              value={activeTenant.id}
+              onChange={(e) => setActiveTenantById(e.target.value)}
+              className="btn btn-outline"
+              style={{ padding: '6px 12px', height: '36px', fontSize: '0.85rem', fontWeight: 600, border: '1.5px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}
+            >
+              {tenants.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+        </header>
 
-              <div className="tenant-list">
-                {tenants.map((t) => (
-                  <div
-                    key={t.id}
-                    onClick={() => setActiveTenantById(t.id)}
-                    className={`tenant-option ${activeTenant.id === t.id ? 'active' : ''}`}
-                  >
-                    <div className="tenant-indicator">
-                      <div className="tenant-indicator-dot" />
-                    </div>
-                    <div className="tenant-info">
-                      <span className="tenant-name">{t.name}</span>
-                      <span className="tenant-id">{t.id.substring(0, 8)}...</span>
+        {/* BODY */}
+        <main className="admin-body">
+          {/* TAB 1: DASHBOARD (MOCK/PLACEHOLDER FOR US-009) */}
+          {activeTab === 'dashboard' && (
+            <div>
+              {/* Premium metrics grid */}
+              <div className="metrics-grid">
+                <div className="metric-card">
+                  <div className="metric-card-bg-gradient" />
+                  <div className="metric-card-header">
+                    <span className="metric-card-title">Tổng số tìm kiếm</span>
+                    <div className="metric-card-icon">
+                      <TrendingUp size={18} />
                     </div>
                   </div>
-                ))}
-              </div>
-            </section>
+                  <div className="metric-card-value">1,482</div>
+                  <div className="metric-card-sub">Lượt tìm kiếm trong 30 ngày qua</div>
+                </div>
 
-            {/* Sync control database panel */}
-            <section className="admin-card">
-              <div className="admin-card-title">
-                <RefreshCw size={18} style={{ color: 'var(--primary)' }} />
-                <span>Đồng bộ Cơ sở dữ liệu</span>
-              </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Đẩy dữ liệu sản phẩm mới nhất từ PostgreSQL của Tenant qua Elasticsearch/OpenSearch.
-              </p>
+                <div className="metric-card">
+                  <div className="metric-card-bg-gradient" />
+                  <div className="metric-card-header">
+                    <span className="metric-card-title">Tìm kiếm lỗi (0 kết quả)</span>
+                    <div className="metric-card-icon" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' }}>
+                      <AlertCircle size={18} />
+                    </div>
+                  </div>
+                  <div className="metric-card-value">42</div>
+                  <div className="metric-card-sub">Cần AI phân tích tối ưu hóa</div>
+                </div>
 
-              <button
-                disabled={syncing}
-                onClick={handleSyncDatabase}
-                className="btn btn-primary"
-                style={{ width: '100%', height: '46px' }}
+                <div className="metric-card">
+                  <div className="metric-card-bg-gradient" />
+                  <div className="metric-card-header">
+                    <span className="metric-card-title">Tỷ lệ CTR Tìm kiếm</span>
+                    <div className="metric-card-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
+                      <CheckCircle2 size={18} />
+                    </div>
+                  </div>
+                  <div className="metric-card-value">76.4%</div>
+                  <div className="metric-card-sub">+3.2% so với tháng trước</div>
+                </div>
+
+                <div className="metric-card">
+                  <div className="metric-card-bg-gradient" />
+                  <div className="metric-card-header">
+                    <span className="metric-card-title">Từ điển hoạt động</span>
+                    <div className="metric-card-icon" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary)' }}>
+                      <BookOpen size={18} />
+                    </div>
+                  </div>
+                  <div className="metric-card-value">{spellcheckRules.length + synonymRules.length}</div>
+                  <div className="metric-card-sub">{spellcheckRules.length} sửa lỗi, {synonymRules.length} đồng nghĩa</div>
+                </div>
+              </div>
+
+              {/* Layout for analytics tables */}
+              <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                <section className="admin-card">
+                  <div className="admin-card-title">
+                    <AlertCircle size={18} style={{ color: 'var(--danger)' }} />
+                    <span>Top Từ khóa 0 kết quả (Zero Results)</span>
+                  </div>
+                  <div className="table-wrapper">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Từ khóa</th>
+                          <th>Số lần tìm</th>
+                          <th>Trạng thái đề xuất</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ fontWeight: 600 }}>stel</td>
+                          <td>14</td>
+                          <td><span className="badge-status" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>Đã gợi ý sửa đổi</span></td>
+                        </tr>
+                        <tr>
+                          <td style={{ fontWeight: 600 }}>chuot gaming</td>
+                          <td>12</td>
+                          <td><span className="badge-status" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>Đã gợi ý sửa đổi</span></td>
+                        </tr>
+                        <tr>
+                          <td style={{ fontWeight: 600 }}>keycron</td>
+                          <td>9</td>
+                          <td><span className="badge-status" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>Chờ AI quét</span></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section className="admin-card">
+                  <div className="admin-card-title">
+                    <TrendingUp size={18} style={{ color: 'var(--primary)' }} />
+                    <span>Lượt tìm kiếm phổ biến theo danh mục</span>
+                  </div>
+                  <div className="table-wrapper">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Danh mục</th>
+                          <th>Số lượt tìm</th>
+                          <th>Tỷ lệ Click (CTR)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ fontWeight: 600 }}>Bàn phím cơ</td>
+                          <td>642</td>
+                          <td>82.1%</td>
+                        </tr>
+                        <tr>
+                          <td style={{ fontWeight: 600 }}>Chuột Gaming</td>
+                          <td>412</td>
+                          <td>74.6%</td>
+                        </tr>
+                        <tr>
+                          <td style={{ fontWeight: 600 }}>Tai nghe</td>
+                          <td>198</td>
+                          <td>68.9%</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+
+              {/* US-009 information alert */}
+              <div 
+                style={{ 
+                  marginTop: '24px', 
+                  padding: '16px', 
+                  borderRadius: '8px', 
+                  border: '1px solid var(--border-color)', 
+                  backgroundColor: 'var(--bg-primary)', 
+                  display: 'flex', 
+                  gap: '12px', 
+                  alignItems: 'center' 
+                }}
               >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="spinner" size={18} />
-                    Đang đồng bộ...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw size={18} />
-                    Sync Database
-                  </>
-                )}
-              </button>
-
-              {/* Status Message feedback */}
-              {syncMessage && (
-                <div 
-                  style={{ 
-                    marginTop: '16px', 
-                    padding: '12px', 
-                    borderRadius: '8px', 
-                    fontSize: '0.8rem', 
-                    display: 'flex', 
-                    gap: '8px',
-                    alignItems: 'flex-start',
-                    backgroundColor: syncMessage.type === 'success' ? 'var(--success-light)' : '#fee2e2',
-                    color: syncMessage.type === 'success' ? 'var(--success)' : 'var(--danger)',
-                    border: `1px solid ${syncMessage.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`
-                  }}
-                >
-                  {syncMessage.type === 'success' ? (
-                    <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-                  ) : (
-                    <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-                  )}
-                  <span>{syncMessage.text}</span>
+                <HelpCircle size={24} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <div>
+                  <h4 style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '2px' }}>
+                    Dashboard Analytics (US-009)
+                  </h4>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Màn hình này đang hiển thị số liệu phân tích mẫu. Tính năng liên kết trực tiếp biểu đồ thời gian thực với dữ liệu từ ElasticSearch/OpenSearch clicklogs sẽ được hoàn thiện trong US-009.
+                  </p>
                 </div>
-              )}
-            </section>
-          </div>
+              </div>
+            </div>
+          )}
 
-          {/* RIGHT AREA: DICTIONARIES & LOGS TABLES */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-            {/* AI Suggestions Engine Panel */}
-            <section className="admin-card">
-              <div className="admin-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Đề xuất tối ưu hóa từ AI (AI Suggestions)</span>
+          {/* TAB 2: AI SUGGESTIONS ENGINE (BACKEND PAGINATED, FILTERED, SEARCHED) */}
+          {activeTab === 'ai-suggestions' && (
+            <div>
+              {/* Header card with action triggers */}
+              <div className="admin-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+                <div>
+                  <h3 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '4px' }}>
+                    Trung tâm đề xuất tối ưu hóa AI
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                    AI phân tích lịch sử tìm kiếm kém hiệu quả để đề xuất chính tả (Typo) hoặc từ đồng nghĩa (Synonym).
+                  </p>
                 </div>
-                <div style={{ display: 'flex', gap: '16px' }}>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <button 
                     onClick={handleGenerateAISuggestions}
-                    disabled={generatingSuggestions || loadingSuggestions}
-                    className="text-gradient" 
-                    style={{ fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none' }}
+                    disabled={generatingSuggestions || loadingTypos || loadingSynonyms}
+                    className="btn btn-primary"
+                    style={{ height: '36px', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    <Sparkles className={generatingSuggestions ? 'spinner' : ''} size={12} />
+                    <Sparkles className={generatingSuggestions ? 'spinner' : ''} size={14} />
                     {generatingSuggestions ? 'Đang phân tích...' : 'Phân tích AI ngay'}
                   </button>
+
                   <button 
-                    onClick={fetchAISuggestions} 
-                    disabled={loadingSuggestions || generatingSuggestions}
-                    className="text-gradient" 
-                    style={{ fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none' }}
+                    onClick={() => { fetchTypoSuggestions(); fetchSynonymSuggestions(); }}
+                    disabled={loadingTypos || loadingSynonyms || generatingSuggestions}
+                    className="btn btn-outline"
+                    style={{ height: '36px', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    <RefreshCw className={loadingSuggestions ? 'spinner' : ''} size={12} />
-                    Làm mới
+                    <RefreshCw className={(loadingTypos || loadingSynonyms) ? 'spinner' : ''} size={14} />
+                    Tải lại
                   </button>
                 </div>
               </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Các từ khóa tìm kiếm bị lỗi hoặc không hiệu quả được AI phân tích và tự động đề xuất hướng khắc phục.
-              </p>
 
-              <div className="table-wrapper">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Từ gốc (Source)</th>
-                      <th>Gợi ý thay thế (Suggested)</th>
-                      <th>Loại gợi ý</th>
-                      <th>Độ tin cậy</th>
-                      <th>Hành động</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {aiSuggestions.length > 0 ? (
-                      aiSuggestions.map((sugg) => (
-                        <tr key={sugg.id}>
-                          <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{sugg.source_value}</td>
-                          <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{sugg.suggested_value}</td>
-                          <td>
-                            <span className="badge-status" style={{ backgroundColor: sugg.suggestion_type === 'typo' ? '#dbeafe' : '#fef3c7', color: sugg.suggestion_type === 'typo' ? '#1e40af' : '#92400e' }}>
-                              {sugg.suggestion_type === 'typo' ? 'Sửa chính tả' : 'Từ đồng nghĩa'}
-                            </span>
-                          </td>
-                          <td style={{ fontWeight: 600 }}>
-                            {(sugg.confidence_score * 100).toFixed(0)}%
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button 
-                                onClick={() => handleApproveSuggestion(sugg.id)}
-                                className="btn btn-primary" 
-                                style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', backgroundColor: 'var(--success)', borderColor: 'var(--success)' }}
-                              >
-                                Duyệt
-                              </button>
-                              <button 
-                                onClick={() => handleRejectSuggestion(sugg.id)}
-                                className="btn btn-outline" 
-                                style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                              >
-                                Từ chối
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
-                          {loadingSuggestions ? 'Đang tải đề xuất AI...' : 'Không có đề xuất AI nào đang chờ duyệt.'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            
-            {/* Search Dictionaries (Synonyms & Spellchecks) */}
-            <section className="admin-card">
-              <div className="admin-card-title">
-                <BookOpen size={18} style={{ color: 'var(--primary)' }} />
-                <span>Từ điển Tìm kiếm hoạt động (Search Dictionaries)</span>
-              </div>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Đang hiển thị từ điển cấu hình của <strong style={{ color: 'var(--primary)' }}>{activeTenant.name}</strong>.
-              </p>
+              {/* TABLE 1: TYPO CORRECTIONS */}
+              <section className="admin-card" style={{ marginBottom: '24px' }}>
+                <div className="table-controls">
+                  <div className="admin-card-title" style={{ margin: 0 }}>
+                    <AlertTriangle size={18} style={{ color: 'var(--warning)' }} />
+                    <span>Đề xuất Sửa lỗi chính tả (Typo Corrections)</span>
+                    <span className="badge-status" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)', marginLeft: '8px' }}>
+                      {typoTotal} đề xuất
+                    </span>
+                  </div>
 
-              {/* Synonyms Tab Table */}
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Sparkles size={14} style={{ color: 'var(--primary)' }} /> Từ đồng nghĩa (Synonyms Expansion)
-                </h3>
-                <div className="table-wrapper">
+                  {/* Independent filter and search controls for Typo */}
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select
+                      value={typoStatus}
+                      onChange={(e) => { setTypoStatus(e.target.value as any); setTypoPage(1); }}
+                      className="btn btn-outline"
+                      style={{ height: '38px', fontSize: '0.8rem', padding: '0 12px', borderRadius: 'var(--radius-sm)' }}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+
+                    <div className="search-input-wrapper" style={{ margin: 0 }}>
+                      <Search className="search-icon-inside" size={16} />
+                      <input 
+                        type="text"
+                        placeholder="Tìm từ gốc hoặc gợi ý..."
+                        value={typoSearch}
+                        onChange={(e) => { setTypoSearch(e.target.value); setTypoPage(1); }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="table-wrapper" style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}>
                   <table className="admin-table">
                     <thead>
                       <tr>
-                        <th>Từ khóa chính</th>
-                        <th>Từ đồng nghĩa tương đương</th>
-                        <th>Trạng thái</th>
+                        <th>Từ gõ sai (Source)</th>
+                        <th>Gợi ý thay thế (Suggested)</th>
+                        <th>Độ tin cậy</th>
+                        <th>Status</th>
+                        <th>Hành động</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {synonymRules.length > 0 ? (
-                        synonymRules.map((rule) => (
-                          <tr key={rule.id}>
-                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.keyword}</td>
-                            <td>{rule.synonym}</td>
+                      {typoSuggestions.length > 0 ? (
+                        typoSuggestions.map((sugg) => (
+                          <tr key={sugg.id}>
+                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{sugg.source_value}</td>
+                            <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{sugg.suggested_value}</td>
+                            <td style={{ fontWeight: 600 }}>{(sugg.confidence_score * 100).toFixed(0)}%</td>
                             <td>
-                              <span className="badge-status active">Hoạt động</span>
+                              <span className={`badge-status ${sugg.status}`} style={{
+                                backgroundColor: sugg.status === 'approved' ? 'var(--success-light)' : sugg.status === 'rejected' ? '#fee2e2' : 'var(--primary-light)',
+                                color: sugg.status === 'approved' ? 'var(--success)' : sugg.status === 'rejected' ? 'var(--danger)' : 'var(--primary)'
+                              }}>
+                                {sugg.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td>
+                              {sugg.status === 'pending' && (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button 
+                                    onClick={() => handleApproveSuggestion(sugg.id, 'typo')}
+                                    className="btn btn-primary" 
+                                    style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', backgroundColor: 'var(--success)', borderColor: 'var(--success)' }}
+                                  >
+                                    Duyệt
+                                  </button>
+                                  <button 
+                                    onClick={() => handleRejectSuggestion(sugg.id, 'typo')}
+                                    className="btn btn-outline" 
+                                    style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                                  >
+                                    Từ chối
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                            {loadingDictionaries ? 'Đang tải từ đồng nghĩa...' : 'Không có quy tắc từ đồng nghĩa nào được cấu hình.'}
+                          <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                            {loadingTypos ? 'Đang tải đề xuất sửa lỗi...' : 'Không tìm thấy đề xuất chính tả nào.'}
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
-              </div>
 
-              {/* Spellcheck Tab Table */}
-              <div>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Sparkles size={14} style={{ color: 'var(--primary)' }} /> Sửa lỗi chính tả (Spellcheck Dictionary)
-                </h3>
-                <div className="table-wrapper">
+                {/* Typo Pagination */}
+                <div className="pagination-container">
+                  <div className="pagination-info">
+                    Hiển thị {typoSuggestions.length > 0 ? typoStartIndex + 1 : 0} - {Math.min(typoStartIndex + itemsPerPage, typoTotal)} trong tổng số {typoTotal} đề xuất
+                  </div>
+                  <div className="pagination-buttons">
+                    <button 
+                      disabled={typoPage === 1}
+                      onClick={() => setTypoPage(typoPage - 1)}
+                      className="pagination-btn"
+                    >
+                      <ChevronLeft size={14} /> Trước
+                    </button>
+                    <span style={{ fontSize: '0.8rem', alignSelf: 'center', fontWeight: 600, color: 'var(--text-secondary)', padding: '0 8px' }}>
+                      Trang {typoPage} / {totalTypoPages}
+                    </span>
+                    <button 
+                      disabled={typoPage === totalTypoPages}
+                      onClick={() => setTypoPage(typoPage + 1)}
+                      className="pagination-btn"
+                    >
+                      Sau <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* TABLE 2: SYNONYM SUGGESTIONS */}
+              <section className="admin-card">
+                <div className="table-controls">
+                  <div className="admin-card-title" style={{ margin: 0 }}>
+                    <Sparkles size={18} style={{ color: 'var(--primary)' }} />
+                    <span>Đề xuất Từ đồng nghĩa (Synonyms Proposals)</span>
+                    <span className="badge-status" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--secondary)', marginLeft: '8px' }}>
+                      {synonymTotal} đề xuất
+                    </span>
+                  </div>
+
+                  {/* Independent filter and search controls for Synonym */}
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select
+                      value={synonymStatus}
+                      onChange={(e) => { setSynonymStatus(e.target.value as any); setSynonymPage(1); }}
+                      className="btn btn-outline"
+                      style={{ height: '38px', fontSize: '0.8rem', padding: '0 12px', borderRadius: 'var(--radius-sm)' }}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+
+                    <div className="search-input-wrapper" style={{ margin: 0 }}>
+                      <Search className="search-icon-inside" size={16} />
+                      <input 
+                        type="text"
+                        placeholder="Tìm từ gốc hoặc gợi ý..."
+                        value={synonymSearch}
+                        onChange={(e) => { setSynonymSearch(e.target.value); setSynonymPage(1); }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="table-wrapper" style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}>
                   <table className="admin-table">
                     <thead>
                       <tr>
-                        <th>Từ gõ sai (Typo Word)</th>
-                        <th>Từ sửa đúng (Correct Word)</th>
-                        <th>Trạng thái</th>
+                        <th>Từ gốc (Source)</th>
+                        <th>Gợi ý đồng nghĩa (Synonym)</th>
+                        <th>Độ tin cậy</th>
+                        <th>Status</th>
+                        <th>Hành động</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {spellcheckRules.length > 0 ? (
-                        spellcheckRules.map((rule) => (
-                          <tr key={rule.id}>
-                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.typo_word}</td>
-                            <td>{rule.correct_word}</td>
+                      {synonymSuggestions.length > 0 ? (
+                        synonymSuggestions.map((sugg) => (
+                          <tr key={sugg.id}>
+                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{sugg.source_value}</td>
+                            <td style={{ fontWeight: 700, color: 'var(--success)' }}>{sugg.suggested_value}</td>
+                            <td style={{ fontWeight: 600 }}>{(sugg.confidence_score * 100).toFixed(0)}%</td>
                             <td>
-                              <span className="badge-status active">Hoạt động</span>
+                              <span className={`badge-status ${sugg.status}`} style={{
+                                backgroundColor: sugg.status === 'approved' ? 'var(--success-light)' : sugg.status === 'rejected' ? '#fee2e2' : 'var(--primary-light)',
+                                color: sugg.status === 'approved' ? 'var(--success)' : sugg.status === 'rejected' ? 'var(--danger)' : 'var(--primary)'
+                              }}>
+                                {sugg.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td>
+                              {sugg.status === 'pending' && (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button 
+                                    onClick={() => handleApproveSuggestion(sugg.id, 'synonym')}
+                                    className="btn btn-primary" 
+                                    style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', backgroundColor: 'var(--success)', borderColor: 'var(--success)' }}
+                                  >
+                                    Duyệt
+                                  </button>
+                                  <button 
+                                    onClick={() => handleRejectSuggestion(sugg.id, 'synonym')}
+                                    className="btn btn-outline" 
+                                    style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                                  >
+                                    Từ chối
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                            {loadingDictionaries ? 'Đang tải từ điển sửa lỗi chính tả...' : 'Không có quy tắc chính tả nào được cấu hình.'}
+                          <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                            {loadingSynonyms ? 'Đang tải đề xuất đồng nghĩa...' : 'Không tìm thấy đề xuất đồng nghĩa nào.'}
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </section>
 
-            {/* Sync History Logs List */}
-            <section className="admin-card">
-              <div className="admin-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Clock size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Lịch sử Đồng bộ (Sync History Logs)</span>
+                {/* Synonym Pagination */}
+                <div className="pagination-container">
+                  <div className="pagination-info">
+                    Hiển thị {synonymSuggestions.length > 0 ? synonymStartIndex + 1 : 0} - {Math.min(synonymStartIndex + itemsPerPage, synonymTotal)} trong tổng số {synonymTotal} đề xuất
+                  </div>
+                  <div className="pagination-buttons">
+                    <button 
+                      disabled={synonymPage === 1}
+                      onClick={() => setSynonymPage(synonymPage - 1)}
+                      className="pagination-btn"
+                    >
+                      <ChevronLeft size={14} /> Trước
+                    </button>
+                    <span style={{ fontSize: '0.8rem', alignSelf: 'center', fontWeight: 600, color: 'var(--text-secondary)', padding: '0 8px' }}>
+                      Trang {synonymPage} / {totalSynonymPages}
+                    </span>
+                    <button 
+                      disabled={synonymPage === totalSynonymPages}
+                      onClick={() => setSynonymPage(synonymPage + 1)}
+                      className="pagination-btn"
+                    >
+                      Sau <ChevronRight size={14} />
+                    </button>
+                  </div>
                 </div>
-                {syncLogs.length > 0 && (
-                  <button 
-                    onClick={clearSyncLogs} 
-                    style={{ fontSize: '0.75rem', color: 'var(--danger)', cursor: 'pointer', fontWeight: 500 }}
-                  >
-                    Xóa lịch sử
-                  </button>
-                )}
-              </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Nhật ký các lần kích hoạt API đồng bộ database với OpenSearch.
-              </p>
+              </section>
+            </div>
+          )}
 
-              <div className="table-wrapper">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Thời gian</th>
-                      <th>Cửa hàng (Tenant)</th>
-                      <th>Số lượng cập nhật</th>
-                      <th>Kết quả</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {syncLogs.length > 0 ? (
-                      syncLogs.map((log, idx) => (
-                        <tr key={idx}>
-                          <td>{log.timestamp}</td>
-                          <td style={{ fontSize: '0.8rem' }}>{log.tenantName}</td>
-                          <td style={{ fontWeight: 600 }}>{log.syncedCount} SP</td>
-                          <td>
-                            <span 
-                              className="badge-status" 
-                              style={{ 
-                                backgroundColor: log.status === 'SUCCESS' ? 'var(--success-light)' : '#fee2e2',
-                                color: log.status === 'SUCCESS' ? 'var(--success)' : 'var(--danger)'
-                              }}
-                            >
-                              {log.status === 'SUCCESS' ? 'THÀNH CÔNG' : 'THẤT BẠI'}
-                            </span>
-                          </td>
+          {/* TAB 3: DICTIONARIES (ACTIVE SPELLCHECK & SYNONYMS) */}
+          {activeTab === 'dictionaries' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <section className="admin-card">
+                <div className="admin-card-title">
+                  <BookOpen size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Danh sách Từ điển đang hoạt động (Active Rules)</span>
+                </div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                  Đây là các luật sửa chính tả và từ đồng nghĩa đang được hệ thống Search Engine áp dụng trực tiếp khi khách hàng gõ từ khóa.
+                </p>
+
+                {/* Synonyms list */}
+                <div style={{ marginBottom: '32px' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
+                    <Sparkles size={16} style={{ color: 'var(--primary)' }} /> Quy tắc từ đồng nghĩa (Active Synonyms)
+                  </h3>
+                  <div className="table-wrapper">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Từ khóa chính (Keyword)</th>
+                          <th>Các từ đồng nghĩa tương đương (Synonyms)</th>
+                          <th>Trạng thái hoạt động</th>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
-                          Chưa có lịch sử đồng bộ nào được ghi nhận.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
+                      </thead>
+                      <tbody>
+                        {synonymRules.length > 0 ? (
+                          synonymRules.map((rule) => (
+                            <tr key={rule.id}>
+                              <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.keyword}</td>
+                              <td style={{ fontWeight: 600, color: 'var(--success)' }}>{rule.synonym}</td>
+                              <td>
+                                <span className="badge-status active">Hoạt động</span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px' }}>
+                              {loadingDictionaries ? 'Đang tải quy tắc đồng nghĩa...' : 'Chưa có quy tắc từ đồng nghĩa nào hoạt động.'}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
-        </div>
-      </main>
-      <Footer />
+                {/* Spellcheck list */}
+                <div>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
+                    <AlertTriangle size={16} style={{ color: 'var(--warning)' }} /> Quy tắc sửa lỗi chính tả (Active Spellcheck)
+                  </h3>
+                  <div className="table-wrapper">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Từ gõ sai (Typo Word)</th>
+                          <th>Từ sửa đúng (Correct Word)</th>
+                          <th>Trạng thái hoạt động</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {spellcheckRules.length > 0 ? (
+                          spellcheckRules.map((rule) => (
+                            <tr key={rule.id}>
+                              <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.typo_word}</td>
+                              <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{rule.correct_word}</td>
+                              <td>
+                                <span className="badge-status active">Hoạt động</span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px' }}>
+                              {loadingDictionaries ? 'Đang tải từ điển sửa lỗi...' : 'Chưa có quy tắc sửa chính tả nào hoạt động.'}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* TAB 4: DATABASE SYNC & LOGS */}
+          {activeTab === 'sync' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div className="admin-grid" style={{ gridTemplateColumns: '320px 1fr' }}>
+                {/* Sync controls */}
+                <section className="admin-card">
+                  <div className="admin-card-title">
+                    <RefreshCw size={18} style={{ color: 'var(--primary)' }} />
+                    <span>Kích hoạt đồng bộ</span>
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                    Đồng bộ hóa toàn bộ sản phẩm của Tenant từ Postgres sang OpenSearch index.
+                  </p>
+
+                  <button
+                    disabled={syncing}
+                    onClick={handleSyncDatabase}
+                    className="btn btn-primary"
+                    style={{ width: '100%', height: '46px', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}
+                  >
+                    {syncing ? (
+                      <>
+                        <RefreshCw className="spinner" size={18} />
+                        Đang đồng bộ...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw size={18} />
+                        Đồng bộ ngay
+                      </>
+                    )}
+                  </button>
+
+                  {syncMessage && (
+                    <div 
+                      style={{ 
+                        marginTop: '16px', 
+                        padding: '12px', 
+                        borderRadius: '8px', 
+                        fontSize: '0.8rem', 
+                        display: 'flex', 
+                        gap: '8px',
+                        backgroundColor: syncMessage.type === 'success' ? 'var(--success-light)' : '#fee2e2',
+                        color: syncMessage.type === 'success' ? 'var(--success)' : 'var(--danger)',
+                        border: `1px solid ${syncMessage.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`
+                      }}
+                    >
+                      {syncMessage.type === 'success' ? (
+                        <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+                      ) : (
+                        <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+                      )}
+                      <span>{syncMessage.text}</span>
+                    </div>
+                  )}
+                </section>
+
+                {/* Sync Logs list */}
+                <section className="admin-card">
+                  <div className="admin-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Clock size={18} style={{ color: 'var(--primary)' }} />
+                      <span>Nhật ký lịch sử đồng bộ (Sync Logs)</span>
+                    </div>
+                    {syncLogs.length > 0 && (
+                      <button 
+                        onClick={clearSyncLogs} 
+                        style={{ fontSize: '0.75rem', color: 'var(--danger)', cursor: 'pointer', fontWeight: 600, background: 'none', border: 'none' }}
+                      >
+                        Xóa lịch sử
+                      </button>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                    Lịch sử chạy đồng bộ Postgres sang OpenSearch thủ công của Admin.
+                  </p>
+
+                  <div className="table-wrapper">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Thời gian chạy</th>
+                          <th>Cửa hàng (Tenant)</th>
+                          <th>Số lượng cập nhật</th>
+                          <th>Kết quả trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {syncLogs.length > 0 ? (
+                          syncLogs.map((log, idx) => (
+                            <tr key={idx}>
+                              <td>{log.timestamp}</td>
+                              <td>{log.tenantName}</td>
+                              <td style={{ fontWeight: 600 }}>{log.syncedCount} SP</td>
+                              <td>
+                                <span 
+                                  className="badge-status" 
+                                  style={{ 
+                                    backgroundColor: log.status === 'SUCCESS' ? 'var(--success-light)' : '#fee2e2',
+                                    color: log.status === 'SUCCESS' ? 'var(--success)' : 'var(--danger)'
+                                  }}
+                                >
+                                  {log.status === 'SUCCESS' ? 'THÀNH CÔNG' : 'THẤT BẠI'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                              Chưa ghi nhận lịch sử đồng bộ dữ liệu nào.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+            </div>
+          )}
+        </main>
+
+        <Footer />
+      </div>
     </div>
   );
 };

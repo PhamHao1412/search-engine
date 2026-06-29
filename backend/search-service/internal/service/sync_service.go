@@ -20,6 +20,15 @@ type QueryStat struct {
 	Count int
 }
 
+type GetAISuggestionsParams struct {
+	TenantID       string
+	Status         string
+	SuggestionType string
+	Search         string
+	Page           int
+	PageSize       int
+}
+
 type SearchRepository interface {
 	SaveTranslation(ctx context.Context, t *entity.ProductTranslation) error
 	SaveSyncJob(ctx context.Context, job *entity.SearchSyncJob) error
@@ -36,11 +45,12 @@ type SearchRepository interface {
 	UpdateAISuggestionStatus(ctx context.Context, id, status string) error
 	SaveSpellcheckDictionary(ctx context.Context, entry *entity.SpellcheckDictionary) error
 	SaveSearchSynonym(ctx context.Context, entry *entity.SearchSynonym) error
-	GetAISuggestions(ctx context.Context, tenantID, status, suggestionType string) ([]entity.AISuggestion, error)
+	GetAISuggestions(ctx context.Context, params GetAISuggestionsParams) ([]entity.AISuggestion, int64, error)
 	ApproveAISuggestion(ctx context.Context, tenantID, id string) (*entity.AISuggestion, error)
 	GetSpellcheckRules(ctx context.Context, tenantID string) ([]entity.SpellcheckDictionary, error)
 	GetSearchSynonyms(ctx context.Context, tenantID string) ([]entity.SearchSynonym, error)
 	GetTenantContextSummary(ctx context.Context, tenantID string) (string, error)
+	GetAllTenants(ctx context.Context) ([]entity.Tenant, error)
 }
 
 // ProductIndexer defines indexing operations for search indexing engine (OpenSearch)
@@ -61,6 +71,7 @@ type ProductCache interface {
 	GetCachedSpellcheck(ctx context.Context, tenantID, typoWord string) (string, bool, error)
 	CacheSpellcheck(ctx context.Context, tenantID, typoWord, correctWord string) error
 	DeleteSpellcheckCache(ctx context.Context, tenantID, typoWord string) error
+	DeleteTenantCache(ctx context.Context, tenantID string) error
 }
 
 // TranslationService defines translation operations

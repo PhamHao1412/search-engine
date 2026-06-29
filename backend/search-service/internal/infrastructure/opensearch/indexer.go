@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
-	opensearchgo "github.com/opensearch-project/opensearch-go/v2"
-	"github.com/opensearch-project/opensearch-go/v2/opensearchapi"
 	"search-service/internal/entity"
 	"search-service/internal/service"
+
+	opensearchgo "github.com/opensearch-project/opensearch-go/v2"
+	"github.com/opensearch-project/opensearch-go/v2/opensearchapi"
 )
 
 type opensearchIndexer struct {
@@ -248,14 +249,15 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 		tokens := strings.Fields(trimmedQuery)
 		mustClauses := make([]interface{}, 0, len(tokens))
 
-		// Target fields: name (boosted), description, brand, tags
+		// Target fields: name (boosted), description, brand, tags, and autocomplete suggestions
 		targetFields := []string{
 			"product_name_vi^4",
 			"product_name_en^2",
 			"description_vi",
 			"description_en",
 			"brand",
-			"tags",
+			"search_tags",
+			"suggest",
 		}
 
 		for _, token := range tokens {
@@ -305,7 +307,6 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 						},
 					},
 				},
-				"minimum_should_match": 1,
 			},
 		}
 	}
@@ -445,11 +446,26 @@ func (idx *opensearchIndexer) SuggestProducts(ctx context.Context, tenantID, que
 						},
 					},
 					map[string]interface{}{
-						"match": map[string]interface{}{
-							"suggest": map[string]interface{}{
-								"query":    query,
-								"operator": "and",
+						"bool": map[string]interface{}{
+							"should": []interface{}{
+								map[string]interface{}{
+									"match": map[string]interface{}{
+										"suggest": map[string]interface{}{
+											"query":    query,
+											"operator": "and",
+											"boost":    2.0,
+										},
+									},
+								},
+								map[string]interface{}{
+									"multi_match": map[string]interface{}{
+										"query":    query,
+										"fields":   []string{"product_name_vi", "product_name_en", "product_name_th", "brand"},
+										"operator": "and",
+									},
+								},
 							},
+							"minimum_should_match": 1,
 						},
 					},
 				},
