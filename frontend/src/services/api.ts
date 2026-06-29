@@ -229,3 +229,132 @@ export const getSearchDebugInfo = (
     searchTime: searchTimeMs,
   };
 };
+
+export interface AISuggestion {
+  id: string;
+  tenant_id: string;
+  suggestion_type: 'typo' | 'synonym';
+  source_value: string;
+  suggested_value: string;
+  confidence_score: number;
+  status: 'pending' | 'approved' | 'rejected';
+  reason?: string;
+  created_at: string;
+}
+
+export const adminApi = {
+  /**
+   * Fetch AI suggestions for search optimization
+   */
+  async getAISuggestions(tenantId: string, status = 'pending', type = ''): Promise<AISuggestion[]> {
+    const params = new URLSearchParams({ status });
+    if (type) {
+      params.append('type', type);
+    }
+    const response = await fetch(`${BASE_URL}/admin/ai/suggestions?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch AI suggestions: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.suggestions || [];
+  },
+
+  /**
+   * Approve an AI suggestion
+   */
+  async approveAISuggestion(id: string, tenantId: string): Promise<void> {
+    const response = await fetch(`${BASE_URL}/admin/ai/suggestions/${id}/approve`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to approve AI suggestion: ${response.status}`);
+    }
+  },
+
+  /**
+   * Reject an AI suggestion
+   */
+  async rejectAISuggestion(id: string, tenantId: string): Promise<void> {
+    const response = await fetch(`${BASE_URL}/admin/ai/suggestions/${id}/reject`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to reject AI suggestion: ${response.status}`);
+    }
+  },
+
+  /**
+   * Manually trigger AI analysis and suggestions generation
+   */
+  async generateAISuggestions(tenantId: string): Promise<void> {
+    const response = await fetch(`${BASE_URL}/admin/ai/suggestions/generate`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to generate AI suggestions: ${response.status}`);
+    }
+  },
+
+  /**
+   * Fetch active spellcheck rules for a tenant
+   */
+  async getSpellcheckRules(tenantId: string): Promise<Array<{ id: string; tenant_id: string; typo_word: string; correct_word: string; status: string }>> {
+    const response = await fetch(`${BASE_URL}/admin/dictionaries/spellcheck`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch spellcheck rules: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.rules || [];
+  },
+
+  /**
+   * Fetch active synonym rules for a tenant
+   */
+  async getSearchSynonyms(tenantId: string): Promise<Array<{ id: string; tenant_id: string; keyword: string; synonym: string; status: string }>> {
+    const response = await fetch(`${BASE_URL}/admin/dictionaries/synonyms`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch synonym rules: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.rules || [];
+  },
+};

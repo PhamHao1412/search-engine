@@ -1,6 +1,6 @@
 # US-012 - Approve AI Suggestion
 
-Status: Draft
+Status: Implemented
 Priority: Medium
 Related Requirements:
 * FR-008 AI Suggestion Engine
@@ -11,7 +11,7 @@ Related Requirements:
 # 1. Tiếng Việt
 
 ## Mục tiêu
-Cung cấp giao diện và các API để Admin xem xét, phê duyệt hoặc từ chối các đề xuất tối ưu hóa (từ đồng nghĩa, sửa lỗi chính tả, dịch thuật) do AI tự động sinh ra. Đảm bảo dữ liệu được phê duyệt sẽ phân luồng ghi nhận vào đúng các bảng từ điển nghiệp vụ tương ứng.
+Cung cấp giao diện và các API để Admin xem xét, phê duyệt hoặc từ chối các đề xuất tối ưu hóa (từ đồng nghĩa, sửa lỗi chính tả) do AI tự động sinh ra. Đảm bảo dữ liệu được phê duyệt sẽ phân luồng ghi nhận vào đúng các bảng từ điển nghiệp vụ tương ứng và dọn dẹp Redis cache ngay lập tức.
 
 ## User Story
 Là một Marketplace Admin,  
@@ -34,9 +34,8 @@ Tôi muốn duyệt qua danh sách các gợi ý sửa lỗi chính tả và t�
    * Gửi request `POST /api/v1/admin/ai/suggestions/:id/approve`.
    * Backend chuyển trạng thái bản ghi `ai_suggestions` từ `pending` sang `approved`.
    * **Phân luồng dữ liệu (Data Routing)**:
-     * Nếu `suggestion_type == 'synonym'`: Hệ thống tự động insert một bản ghi mới vào bảng `synonyms` và xóa cache `synonyms` trên Redis.
-     * Nếu `suggestion_type == 'translation'`: Hệ thống tự động insert một bản ghi mới vào bảng `translations`.
-     * Nếu `suggestion_type == 'typo'`: Hệ thống tự động insert một bản ghi mới vào bảng `spellcheck_dictionary` và xóa cache `spellcheck` trên Redis.
+     * Nếu `suggestion_type == 'synonym'`: Hệ thống tự động insert một bản ghi mới vào bảng `search_synonyms` và xóa cache Redis `tenant:{tenantID}:synonyms:*`.
+     * Nếu `suggestion_type == 'typo'`: Hệ thống tự động insert một bản ghi mới vào bảng `spellcheck_dictionary` và xóa cache Redis `tenant:{tenantID}:spellcheck:*`.
 5. **Từ chối đề xuất (Reject)**:
    * Admin bấm nút "Từ chối".
    * Gửi request `POST /api/v1/admin/ai/suggestions/:id/reject`.
@@ -60,15 +59,15 @@ SearchAPI->>DB: Cập nhật ai_suggestions.status = 'approved'
 SearchAPI->>DB: Insert record mới vào bảng 'spellcheck_dictionary'
 SearchAPI->>DB: Cam kết (Commit) Transaction
 DB-->>SearchAPI: Lưu cơ sở dữ liệu thành công
-SearchAPI->>Redis: Invalidate Cache spellcheck của Tenant
+SearchAPI->>Redis: Xóa Cache của Tenant (spellcheck / synonyms)
 Redis-->>SearchAPI: Cache đã được làm sạch
 SearchAPI-->>UI: Phản hồi 200 OK (Thành công)
 UI->>Admin: Ẩn bản ghi đã duyệt, hiển thị thông báo thành công
 ```
 
 ## Tiêu chí chấp nhận (AC)
-*   **AC-001**: Admin có thể lọc danh sách gợi ý theo loại (`synonym`, `typo`, `translation`) và sắp xếp theo điểm tin cậy (`confidence_score`) từ cao xuống thấp để ưu tiên duyệt trước.
-*   **AC-002**: Khi phê duyệt một đề xuất, dữ liệu phải được ghi nhận đồng thời vào bảng đích (`synonyms`, `translations` hoặc `spellcheck_dictionary`) thông qua một Database Transaction để đảm bảo tính toàn vẹn dữ liệu (không xảy ra lỗi cập nhật nửa chừng).
+*   **AC-001**: Admin có thể lọc danh sách gợi ý theo loại (`synonym`, `typo`) và sắp xếp theo điểm tin cậy (`confidence_score`) từ cao xuống thấp để ưu tiên duyệt trước.
+*   **AC-002**: Khi phê duyệt một đề xuất, dữ liệu phải được ghi nhận đồng thời vào bảng đích (`search_synonyms` hoặc `spellcheck_dictionary`) thông qua một Database Transaction để đảm bảo tính toàn vẹn dữ liệu (không xảy ra lỗi cập nhật nửa chừng).
 *   **AC-003**: Invalidate cache chính xác. Ngay sau khi duyệt đề xuất Synonym hoặc Typo, cache Redis tương ứng của tenant phải được xóa ngay lập tức để người mua được áp dụng quy tắc mới trong giây tiếp theo.
 
 ## Quy tắc nghiệp vụ (BR)

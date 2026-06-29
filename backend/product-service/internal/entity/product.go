@@ -19,7 +19,7 @@ type TenantConfig struct {
 }
 
 type Category struct {
-	ID        string    `gorm:"type:uuid;primaryKey" json:"id"`
+	ID        string    `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
 	TenantID  string    `gorm:"type:uuid;not null" json:"tenant_id"`
 	Name      string    `gorm:"type:varchar(255);not null" json:"name"`
 	ParentID  *string   `gorm:"type:uuid" json:"parent_id,omitempty"`

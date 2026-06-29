@@ -1,6 +1,6 @@
 # US-004 - Spellcheck
 
-Status: Draft
+Status: Implemented
 Priority: Medium
 Related Requirements:
 * FR-003 Spellcheck
@@ -60,7 +60,7 @@ alt Typo Found in Local Cache
     OpenSearch-->>SearchAPI: Trả về danh sách sản phẩm
     SearchAPI-->>FE: Trả kết quả kèm flag: suggested = "iphone"
 else Typo Not Found
-    SearchAPI->>OpenSearch: Gửi Multi-Search _msearch (Search + Term Suggestion)
+    SearchAPI->>OpenSearch: Gửi Multi-Search _msearch (Tầng 2: Search + Term Suggestion)
     OpenSearch-->>SearchAPI: Trả về kết quả sản phẩm & gợi ý chính tả
     alt OpenSearch Has Suggestion "iphone"
         SearchAPI-->>FE: Trả kết quả sản phẩm kèm gợi ý "iphone"

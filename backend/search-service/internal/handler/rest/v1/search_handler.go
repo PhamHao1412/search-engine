@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"search-service/internal/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 type SearchHandler struct {
@@ -53,7 +54,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		pageSize = 20
 	}
 
-	products, total, searchLogID, err := h.searchSvc.Search(c.Request.Context(), tenantID, query, page, pageSize)
+	products, total, searchLogID, spellcheckCorrected, autoCorrected, err := h.searchSvc.Search(c.Request.Context(), tenantID, query, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Search Service Unavailable: %v", err)})
 		return
@@ -65,12 +66,14 @@ func (h *SearchHandler) Search(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"search_log_id": searchLogID,
-		"products":      products,
-		"total":         total,
-		"page":          page,
-		"page_size":     pageSize,
-		"total_pages":   totalPages,
+		"search_log_id":        searchLogID,
+		"products":             products,
+		"total":                total,
+		"page":                 page,
+		"page_size":            pageSize,
+		"total_pages":          totalPages,
+		"spellcheck_corrected": spellcheckCorrected,
+		"auto_corrected":       autoCorrected,
 	})
 }
 

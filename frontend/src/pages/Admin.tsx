@@ -12,7 +12,7 @@ import {
   AlertTriangle 
 } from 'lucide-react';
 import { useTenant } from '../context/TenantContext';
-import { searchApi } from '../services/api';
+import { searchApi, adminApi, AISuggestion } from '../services/api';
 import Footer from '../components/Footer';
 
 interface SyncLog {
@@ -24,35 +24,6 @@ interface SyncLog {
   errorMessage?: string;
 }
 
-// Static dictionary rules display based on active tenant ID
-const SYNONYMS_RULES: Record<string, Array<{ keyword: string; synonyms: string; status: string }>> = {
-  'd3b07384-d113-4956-a5db-251d50c18d01': [
-    { keyword: 'akko', synonyms: 'bàn phím, keyboard, phím cơ, keycap', status: 'active' },
-    { keyword: 'logitech', synonyms: 'chuột, mouse, gaming gear, bàn di chuột', status: 'active' },
-    { keyword: 'bàn phím', synonyms: 'keyboard, phím cơ, keycap, gaming keyboard', status: 'active' },
-    { keyword: 'chuột', synonyms: 'mouse, chuột không dây, gaming mouse', status: 'active' },
-  ],
-  'a1a2a3a4-b1b2-c1c2-d1d2-e1e2e3e4e5e6': [
-    { keyword: 'son', synonyms: 'lipstick, son dưỡng, mỹ phẩm, lip balm', status: 'active' },
-    { keyword: 'mỹ phẩm', synonyms: 'cosmetics, son môi, kem dưỡng da, skincare', status: 'active' },
-    { keyword: 'kem chống nắng', synonyms: 'sunscreen, bảo vệ da, mỹ phẩm', status: 'active' },
-  ]
-};
-
-const SPELLCHECK_RULES: Record<string, Array<{ typo: string; correct: string; status: string }>> = {
-  'd3b07384-d113-4956-a5db-251d50c18d01': [
-    { typo: 'ako', correct: 'akko', status: 'active' },
-    { typo: 'logitek', correct: 'logitech', status: 'active' },
-    { typo: 'chuot', correct: 'chuột', status: 'active' },
-    { typo: 'ban phim', correct: 'bàn phím', status: 'active' },
-  ],
-  'a1a2a3a4-b1b2-c1c2-d1d2-e1e2e3e4e5e6': [
-    { typo: 'son duong', correct: 'son dưỡng', status: 'active' },
-    { typo: 'my pham', correct: 'mỹ phẩm', status: 'active' },
-    { typo: 'lip balm', correct: 'son dưỡng', status: 'active' },
-  ]
-};
-
 const Admin: React.FC = () => {
   const navigate = useNavigate();
   const { activeTenant, setActiveTenantById, tenants } = useTenant();
@@ -62,7 +33,14 @@ const Admin: React.FC = () => {
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [syncLogs, setSyncLogs] = useState<SyncLog[]>([]);
 
-  // Load sync logs from localStorage
+  // AI Suggestions & Dictionaries live state
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
+  const [spellcheckRules, setSpellcheckRules] = useState<Array<{ id: string; typo_word: string; correct_word: string; status: string }>>([]);
+  const [synonymRules, setSynonymRules] = useState<Array<{ id: string; keyword: string; synonym: string; status: string }>>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [loadingDictionaries, setLoadingDictionaries] = useState(false);
+
+  // Load sync logs from localStorage on mount
   useEffect(() => {
     const savedLogs = localStorage.getItem('search_sync_logs');
     if (savedLogs) {
@@ -73,6 +51,73 @@ const Admin: React.FC = () => {
       }
     }
   }, []);
+
+  const fetchAISuggestions = async () => {
+    setLoadingSuggestions(true);
+    try {
+      const data = await adminApi.getAISuggestions(activeTenant.id, 'pending');
+      setAiSuggestions(data);
+    } catch (e) {
+      console.error('Failed to fetch AI suggestions', e);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const fetchDictionaries = async () => {
+    setLoadingDictionaries(true);
+    try {
+      const spRules = await adminApi.getSpellcheckRules(activeTenant.id);
+      setSpellcheckRules(spRules);
+      
+      const synRules = await adminApi.getSearchSynonyms(activeTenant.id);
+      setSynonymRules(synRules);
+    } catch (e) {
+      console.error('Failed to fetch dictionary rules', e);
+    } finally {
+      setLoadingDictionaries(false);
+    }
+  };
+
+  // Fetch data on active tenant change
+  useEffect(() => {
+    fetchAISuggestions();
+    fetchDictionaries();
+  }, [activeTenant.id]);
+
+  const handleApproveSuggestion = async (id: string) => {
+    try {
+      await adminApi.approveAISuggestion(id, activeTenant.id);
+      fetchAISuggestions();
+      fetchDictionaries();
+    } catch (e: any) {
+      alert(`Phê duyệt thất bại: ${e.message || 'Lỗi hệ thống'}`);
+    }
+  };
+
+  const handleRejectSuggestion = async (id: string) => {
+    try {
+      await adminApi.rejectAISuggestion(id, activeTenant.id);
+      fetchAISuggestions();
+    } catch (e: any) {
+      alert(`Từ chối thất bại: ${e.message || 'Lỗi hệ thống'}`);
+    }
+  };
+
+  const [generatingSuggestions, setGeneratingSuggestions] = useState(false);
+
+  const handleGenerateAISuggestions = async () => {
+    if (generatingSuggestions) return;
+    setGeneratingSuggestions(true);
+    try {
+      await adminApi.generateAISuggestions(activeTenant.id);
+      await fetchAISuggestions();
+    } catch (e: any) {
+      alert(`Phân tích AI thất bại: ${e.message || 'Lỗi hệ thống'}`);
+    } finally {
+      setGeneratingSuggestions(false);
+    }
+  };
 
   const handleSyncDatabase = async () => {
     setSyncing(true);
@@ -90,7 +135,7 @@ const Admin: React.FC = () => {
         status: 'SUCCESS',
       };
 
-      const updatedLogs = [newLog, ...syncLogs].slice(0, 10); // Keep last 10 logs
+      const updatedLogs = [newLog, ...syncLogs].slice(0, 10);
       setSyncLogs(updatedLogs);
       localStorage.setItem('search_sync_logs', JSON.stringify(updatedLogs));
 
@@ -126,9 +171,6 @@ const Admin: React.FC = () => {
     setSyncLogs([]);
     localStorage.removeItem('search_sync_logs');
   };
-
-  const synonyms = SYNONYMS_RULES[activeTenant.id] || [];
-  const spellcheck = SPELLCHECK_RULES[activeTenant.id] || [];
 
   return (
     <div className="app-container">
@@ -250,12 +292,101 @@ const Admin: React.FC = () => {
 
           {/* RIGHT AREA: DICTIONARIES & LOGS TABLES */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+            {/* AI Suggestions Engine Panel */}
+            <section className="admin-card">
+              <div className="admin-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Đề xuất tối ưu hóa từ AI (AI Suggestions)</span>
+                </div>
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <button 
+                    onClick={handleGenerateAISuggestions}
+                    disabled={generatingSuggestions || loadingSuggestions}
+                    className="text-gradient" 
+                    style={{ fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none' }}
+                  >
+                    <Sparkles className={generatingSuggestions ? 'spinner' : ''} size={12} />
+                    {generatingSuggestions ? 'Đang phân tích...' : 'Phân tích AI ngay'}
+                  </button>
+                  <button 
+                    onClick={fetchAISuggestions} 
+                    disabled={loadingSuggestions || generatingSuggestions}
+                    className="text-gradient" 
+                    style={{ fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none' }}
+                  >
+                    <RefreshCw className={loadingSuggestions ? 'spinner' : ''} size={12} />
+                    Làm mới
+                  </button>
+                </div>
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Các từ khóa tìm kiếm bị lỗi hoặc không hiệu quả được AI phân tích và tự động đề xuất hướng khắc phục.
+              </p>
+
+              <div className="table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Từ gốc (Source)</th>
+                      <th>Gợi ý thay thế (Suggested)</th>
+                      <th>Loại gợi ý</th>
+                      <th>Độ tin cậy</th>
+                      <th>Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiSuggestions.length > 0 ? (
+                      aiSuggestions.map((sugg) => (
+                        <tr key={sugg.id}>
+                          <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{sugg.source_value}</td>
+                          <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{sugg.suggested_value}</td>
+                          <td>
+                            <span className="badge-status" style={{ backgroundColor: sugg.suggestion_type === 'typo' ? '#dbeafe' : '#fef3c7', color: sugg.suggestion_type === 'typo' ? '#1e40af' : '#92400e' }}>
+                              {sugg.suggestion_type === 'typo' ? 'Sửa chính tả' : 'Từ đồng nghĩa'}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 600 }}>
+                            {(sugg.confidence_score * 100).toFixed(0)}%
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                onClick={() => handleApproveSuggestion(sugg.id)}
+                                className="btn btn-primary" 
+                                style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', backgroundColor: 'var(--success)', borderColor: 'var(--success)' }}
+                              >
+                                Duyệt
+                              </button>
+                              <button 
+                                onClick={() => handleRejectSuggestion(sugg.id)}
+                                className="btn btn-outline" 
+                                style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                              >
+                                Từ chối
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                          {loadingSuggestions ? 'Đang tải đề xuất AI...' : 'Không có đề xuất AI nào đang chờ duyệt.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
             
             {/* Search Dictionaries (Synonyms & Spellchecks) */}
             <section className="admin-card">
               <div className="admin-card-title">
                 <BookOpen size={18} style={{ color: 'var(--primary)' }} />
-                <span>Từ điển Tìm kiếm (Search Dictionaries)</span>
+                <span>Từ điển Tìm kiếm hoạt động (Search Dictionaries)</span>
               </div>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                 Đang hiển thị từ điển cấu hình của <strong style={{ color: 'var(--primary)' }}>{activeTenant.name}</strong>.
@@ -276,11 +407,11 @@ const Admin: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {synonyms.length > 0 ? (
-                        synonyms.map((rule, idx) => (
-                          <tr key={idx}>
+                      {synonymRules.length > 0 ? (
+                        synonymRules.map((rule) => (
+                          <tr key={rule.id}>
                             <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.keyword}</td>
-                            <td>{rule.synonyms}</td>
+                            <td>{rule.synonym}</td>
                             <td>
                               <span className="badge-status active">Hoạt động</span>
                             </td>
@@ -289,7 +420,7 @@ const Admin: React.FC = () => {
                       ) : (
                         <tr>
                           <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                            Không có quy tắc từ đồng nghĩa nào được cấu hình.
+                            {loadingDictionaries ? 'Đang tải từ đồng nghĩa...' : 'Không có quy tắc từ đồng nghĩa nào được cấu hình.'}
                           </td>
                         </tr>
                       )}
@@ -313,11 +444,11 @@ const Admin: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {spellcheck.length > 0 ? (
-                        spellcheck.map((rule, idx) => (
-                          <tr key={idx}>
-                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.typo}</td>
-                            <td>{rule.correct}</td>
+                      {spellcheckRules.length > 0 ? (
+                        spellcheckRules.map((rule) => (
+                          <tr key={rule.id}>
+                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.typo_word}</td>
+                            <td>{rule.correct_word}</td>
                             <td>
                               <span className="badge-status active">Hoạt động</span>
                             </td>
@@ -326,7 +457,7 @@ const Admin: React.FC = () => {
                       ) : (
                         <tr>
                           <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                            Không có quy tắc chính tả nào được cấu hình.
+                            {loadingDictionaries ? 'Đang tải từ điển sửa lỗi chính tả...' : 'Không có quy tắc chính tả nào được cấu hình.'}
                           </td>
                         </tr>
                       )}

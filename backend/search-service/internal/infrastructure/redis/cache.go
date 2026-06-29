@@ -93,3 +93,28 @@ func (c *redisCache) CacheSuggestions(ctx context.Context, tenantID, query strin
 	}
 	return c.client.Set(ctx, redisKey, string(val), 5*time.Minute).Err()
 }
+
+func (c *redisCache) GetCachedSpellcheck(ctx context.Context, tenantID, typoWord string) (string, bool, error) {
+	redisKey := fmt.Sprintf("tenant:%s:spellcheck:%s", tenantID, typoWord)
+	val, err := c.client.Get(ctx, redisKey).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", false, nil
+	} else if err != nil {
+		return "", false, err
+	}
+	return val, true, nil
+}
+
+func (c *redisCache) CacheSpellcheck(ctx context.Context, tenantID, typoWord, correctWord string) error {
+	redisKey := fmt.Sprintf("tenant:%s:spellcheck:%s", tenantID, typoWord)
+	ttl := 24 * time.Hour
+	if correctWord == "-" {
+		ttl = 5 * time.Minute
+	}
+	return c.client.Set(ctx, redisKey, correctWord, ttl).Err()
+}
+
+func (c *redisCache) DeleteSpellcheckCache(ctx context.Context, tenantID, typoWord string) error {
+	redisKey := fmt.Sprintf("tenant:%s:spellcheck:%s", tenantID, typoWord)
+	return c.client.Del(ctx, redisKey).Err()
+}

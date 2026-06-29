@@ -166,6 +166,7 @@ func (idx *opensearchIndexer) EnsureIndex(ctx context.Context) {
 			"properties": {
 				"id": { "type": "keyword" },
 				"tenant_id": { "type": "keyword" },
+				"category_id": { "type": "keyword" },
 				"product_name_vi": { "type": "text", "analyzer": "vi_ascii_analyzer" },
 				"product_name_en": { "type": "text", "analyzer": "english" },
 				"product_name_th": { "type": "text", "analyzer": "thai" },
@@ -224,7 +225,7 @@ func (idx *opensearchIndexer) EnsureIndex(ctx context.Context) {
 	}
 }
 
-func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error) {
+func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
 	var innerQuery map[string]interface{}
 	trimmedQuery := strings.TrimSpace(query)
 	if trimmedQuery == "" {
@@ -243,50 +244,47 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 			},
 		}
 	} else {
-		// Split query into terms to implement robust cross-field minimum-should-match search
-		// across fields with different languages/analyzers.
-		words := strings.Fields(trimmedQuery)
-		termClauses := make([]interface{}, 0, len(words))
-		for _, word := range words {
-			termClauses = append(termClauses, map[string]interface{}{
+		// Split search query by space for exact/bool matching
+		tokens := strings.Fields(trimmedQuery)
+		mustClauses := make([]interface{}, 0, len(tokens))
+
+		// Target fields: name (boosted), description, brand, tags
+		targetFields := []string{
+			"product_name_vi^4",
+			"product_name_en^2",
+			"description_vi",
+			"description_en",
+			"brand",
+			"tags",
+		}
+
+		for _, token := range tokens {
+			mustClauses = append(mustClauses, map[string]interface{}{
 				"multi_match": map[string]interface{}{
-					"query": word,
-					"fields": []string{
-						"product_name_vi^2.0",
-						"product_name_en^1.5",
-						"product_name_th^1.5",
-						"description_vi^0.8",
-						"description_en^0.8",
-						"description_th^0.8",
-						"brand^1.0",
-						"search_tags^1.0",
-					},
-					"type": "best_fields",
+					"query":                token,
+					"fields":               targetFields,
+					"type":                 "best_fields",
+					"minimum_should_match": "100%",
 				},
 			})
 		}
 
+		// Tenant restriction
+		mustClauses = append(mustClauses, map[string]interface{}{
+			"term": map[string]interface{}{
+				"tenant_id": tenantID,
+			},
+		})
+
 		innerQuery = map[string]interface{}{
 			"bool": map[string]interface{}{
-				"must": []interface{}{
-					map[string]interface{}{
-						"term": map[string]interface{}{
-							"tenant_id": tenantID,
-						},
-					},
-				},
+				"must": mustClauses,
 				"should": []interface{}{
-					map[string]interface{}{
-						"bool": map[string]interface{}{
-							"should":               termClauses,
-							"minimum_should_match": "2<-1 5<-2",
-						},
-					},
 					map[string]interface{}{
 						"match_phrase": map[string]interface{}{
 							"product_name_vi": map[string]interface{}{
 								"query": trimmedQuery,
-								"boost": 4.0,
+								"boost": 5.0,
 							},
 						},
 					},
@@ -342,9 +340,42 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 		},
 	}
 
+	if trimmedQuery != "" {
+		queryObj["suggest"] = map[string]interface{}{
+			"suggest_vi": map[string]interface{}{
+				"text": trimmedQuery,
+				"phrase": map[string]interface{}{
+					"field":      "product_name_vi",
+					"size":       1,
+					"confidence": 0.8,
+					"direct_generator": []interface{}{
+						map[string]interface{}{
+							"field":        "product_name_vi",
+							"suggest_mode": "missing",
+						},
+					},
+				},
+			},
+			"suggest_en": map[string]interface{}{
+				"text": trimmedQuery,
+				"phrase": map[string]interface{}{
+					"field":      "product_name_en",
+					"size":       1,
+					"confidence": 0.8,
+					"direct_generator": []interface{}{
+						map[string]interface{}{
+							"field":        "product_name_en",
+							"suggest_mode": "missing",
+						},
+					},
+				},
+			},
+		}
+	}
+
 	bodyBytes, err := json.Marshal(queryObj)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, "", err
 	}
 
 	req := opensearchapi.SearchRequest{
@@ -354,13 +385,13 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 
 	res, err := req.Do(ctx, idx.client)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, "", err
 	}
 	defer res.Body.Close()
 
 	if res.IsError() {
 		errBytes, _ := io.ReadAll(res.Body)
-		return nil, 0, fmt.Errorf("opensearch search error: %s", string(errBytes))
+		return nil, 0, "", fmt.Errorf("opensearch search error: %s", string(errBytes))
 	}
 
 	var searchResponse struct {
@@ -372,10 +403,16 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 				Source map[string]interface{} `json:"_source"`
 			} `json:"hits"`
 		} `json:"hits"`
+		Suggest map[string][]struct {
+			Options []struct {
+				Text  string  `json:"text"`
+				Score float64 `json:"score"`
+			} `json:"options"`
+		} `json:"suggest"`
 	}
 
 	if err := json.NewDecoder(res.Body).Decode(&searchResponse); err != nil {
-		return nil, 0, err
+		return nil, 0, "", err
 	}
 
 	products := make([]map[string]interface{}, 0, len(searchResponse.Hits.Hits))
@@ -383,7 +420,16 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 		products = append(products, hit.Source)
 	}
 
-	return products, searchResponse.Hits.Total.Value, nil
+	var suggestedQuery string
+	if searchResponse.Suggest != nil {
+		if opts, ok := searchResponse.Suggest["suggest_vi"]; ok && len(opts) > 0 && len(opts[0].Options) > 0 {
+			suggestedQuery = opts[0].Options[0].Text
+		} else if opts, ok := searchResponse.Suggest["suggest_en"]; ok && len(opts) > 0 && len(opts[0].Options) > 0 {
+			suggestedQuery = opts[0].Options[0].Text
+		}
+	}
+
+	return products, searchResponse.Hits.Total.Value, suggestedQuery, nil
 }
 
 func (idx *opensearchIndexer) SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {

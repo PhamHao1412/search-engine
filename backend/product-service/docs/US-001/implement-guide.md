@@ -1,4 +1,4 @@
-# Module Design - US-001 (Product Ingestion)
+# Implement Guide - US-001 (Product Ingestion)
 
 This document describes the design, database schemas, and workflows implemented in `product-service` to satisfy **US-001**.
 

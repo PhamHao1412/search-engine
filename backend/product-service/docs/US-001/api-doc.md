@@ -1,4 +1,4 @@
-# API Contract - US-001 (Product Ingestion)
+# API Doc - US-001 (Product Ingestion)
 
 This document defines the REST API endpoints and event messaging contracts implemented in `product-service` under **US-001**.
 

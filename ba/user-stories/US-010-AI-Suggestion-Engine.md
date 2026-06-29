@@ -1,6 +1,6 @@
 # US-010 - AI Suggestion Engine
 
-Status: Draft
+Status: Implemented
 Priority: Medium
 Related Requirements:
 * FR-008 AI Suggestion Engine
@@ -11,7 +11,7 @@ Related Requirements:
 # 1. Tiếng Việt
 
 ## Mục tiêu
-Tự động phát hiện các từ khóa tìm kiếm bị lỗi hoặc không hiệu quả của người dùng, sử dụng Trí tuệ nhân tạo (OpenAI API) để phân tích ngoại tuyến và đề xuất các từ đồng nghĩa (synonyms), sửa lỗi chính tả (typos), hoặc dịch nghĩa (translations) mới, giúp hệ thống tự học và tối ưu theo thời gian.
+Tự động phát hiện các từ khóa tìm kiếm bị lỗi hoặc không hiệu quả của người dùng, sử dụng Trí tuệ nhân tạo (OpenAI API) để phân tích ngoại tuyến và đề xuất các từ đồng nghĩa (synonyms) hoặc sửa lỗi chính tả (typos) mới, giúp hệ thống tự học và tối ưu theo thời gian.
 
 ## User Story
 Là một Product Manager,  
@@ -20,6 +20,7 @@ Tôi muốn hệ thống tự động phân tích các từ khóa lỗi của kh
 
 ## Actor
 * AI Worker (Hệ thống chạy tự động)
+* Marketplace Admin (Trigger thủ công từ giao diện)
 * OpenAI API (Dịch vụ trí tuệ nhân tạo)
 
 ## Điều kiện tiên quyết
@@ -28,18 +29,21 @@ Tôi muốn hệ thống tự động phân tích các từ khóa lỗi của kh
 * Cơ sở dữ liệu PostgreSQL khả dụng.
 
 ## Luồng chính
-1. Hệ thống kích hoạt AI Suggestion Cron Job định kỳ (ví dụ: hàng ngày vào lúc 2:00 AM).
-2. AI Worker truy vấn PostgreSQL để lấy danh sách từ khóa gặp lỗi:
-   * **Nhóm 1**: Top 50 từ khóa tìm kiếm có tần suất cao nhất nhưng trả về 0 kết quả (`result_count == 0`).
-   * **Nhóm 2**: Top 50 từ khóa tìm kiếm có CTR cực thấp (dưới 5%) mặc dù có kết quả.
-3. Với mỗi từ khóa lỗi, AI Worker tập hợp ngữ cảnh:
-   * Từ khóa lỗi gốc.
-   * Danh mục hàng đầu của hệ thống.
-   * Danh sách tên các sản phẩm bán chạy gần nhất để làm gợi ý ngữ cảnh.
-4. AI Worker gửi request tới OpenAI API (sử dụng OpenAI Structured Outputs để nhận về kết quả chuẩn hóa JSON).
-5. OpenAI phân tích và trả về kết quả gợi ý:
-   * Loại đề xuất: `synonym` (từ đồng nghĩa), `typo` (sửa chính tả) hoặc `translation` (bản dịch).
-   * Từ gốc và từ đề xuất tương ứng.
+1. Luồng kích hoạt:
+   * **Bất đồng bộ (Cron Job)**: Hệ thống tự động kích hoạt tiến trình nền định kỳ mỗi 10 phút.
+   * **Đồng bộ thủ công (Admin API / UI)**: Admin click chọn nút "Phân tích AI ngay" trên giao diện Admin Dashboard để gửi request `POST /api/v1/admin/ai/suggestions/generate`.
+2. AI Worker truy vấn PostgreSQL để lấy danh sách từ khóa gặp lỗi (và loại trừ các từ khóa trống/null):
+   * **Nhóm 1 (Zero-results)**: Top 50 từ khóa tìm kiếm có tần suất cao nhất nhưng trả về 0 kết quả (`result_count == 0`), đồng thời không chứa từ khóa đã được phân tích trước đó trong bảng `ai_suggestions`.
+   * **Nhóm 2 (Low-CTR)**: Top 50 từ khóa tìm kiếm có CTR cực thấp (dưới 5% trên tối thiểu 3 lượt tìm kiếm) mặc dù có kết quả, đồng thời không chứa từ khóa đã phân tích trước đó.
+3. AI Worker tổng hợp ngữ cảnh động (Store Profile Context) cực kỳ gọn nhẹ để giảm thiểu Token:
+   * Tên Tenant.
+   * Mô tả kinh doanh (`business_domain` lấy từ bảng `tenant_configs`).
+   * Danh sách tên Danh mục bán hàng (lấy từ bảng `categories`).
+   * Danh sách các Thương hiệu nổi bật của Tenant (lấy từ bảng `products`).
+4. AI Worker gom toàn bộ từ khóa lỗi và gửi một request duy nhất (Bulk Request) tới OpenAI API sử dụng OpenAI JSON Mode để tối ưu hóa chi phí mạng và token.
+5. OpenAI phân tích dựa trên Guidelines và trả về kết quả gợi ý dạng cấu trúc JSON:
+   * Loại đề xuất: `typo` (sửa lỗi gõ sai, thiếu dấu tiếng Việt) hoặc `synonym` (từ đồng nghĩa/tiếng Anh tương đương).
+   * Từ gốc (`source_value`) và từ đề xuất tương ứng (`suggested_value`).
    * Điểm tin cậy (Confidence score) từ 0.0 đến 1.0.
    * Lý do đề xuất.
 6. AI Worker kiểm tra tính hợp lệ của dữ liệu phản hồi từ OpenAI.
@@ -49,27 +53,29 @@ Tôi muốn hệ thống tự động phân tích các từ khóa lỗi của kh
 
 ```mermaid
 sequenceDiagram
-participant Cron as AI Cron Job
-participant Worker as AI Worker (Go)
-participant DB as PostgreSQL (GORM)
-participant OpenAI as OpenAI API
+    actor Admin as Admin / Cron
+    participant Worker as AI Worker (Go)
+    participant DB as PostgreSQL (GORM)
+    participant OpenAI as OpenAI API
 
-Cron->>Worker: Kích hoạt chạy batch job (2:00 AM)
-Worker->>DB: Truy vấn top từ khóa lỗi (result_count = 0 hoặc CTR < 5%)
-DB-->>Worker: Trả về danh sách từ khóa lỗi
-loop Mỗi từ khóa lỗi
-    Worker->>OpenAI: Gọi OpenAI API phân tích từ khóa kèm ngữ cảnh hệ thống
-    OpenAI-->>Worker: Trả về gợi ý đề xuất (Synonym/Typo/Translation + Confidence Score)
-    Worker->>DB: Insert bản ghi trạng thái 'pending' vào bảng 'ai_suggestions'
-end
-Worker-->>Cron: Hoàn tất batch job, ghi log thành công
+    Admin->>Worker: Kích hoạt phân tích (Cron / REST API)
+    Worker->>DB: Truy vấn top từ khóa lỗi thực tế (lọc rỗng/null, loại trừ đã đề xuất)
+    DB-->>Worker: Trả về danh sách từ khóa lỗi
+    Worker->>DB: Lấy Store Profile (Tenant Config + Categories + Brands)
+    DB-->>Worker: Trả về Store Context
+    Worker->>OpenAI: Gửi Bulk Request phân tích kèm Store Context
+    OpenAI-->>Worker: Trả về danh sách gợi ý JSON (Typo / Synonym + Confidence Score)
+    loop Mỗi đề xuất
+        Worker->>DB: Lưu bản ghi trạng thái 'pending' vào bảng 'ai_suggestions'
+    end
+    Worker-->>Admin: Phản hồi kết quả phân tích thành công
 ```
 
 ## Tiêu chí chấp nhận (AC)
 *   **AC-001**: Hệ thống chỉ gửi tối đa 100 từ khóa lỗi nổi bật nhất sang OpenAI trong một lần chạy để tối ưu hóa chi phí API.
-*   **AC-002**: Toàn bộ luồng phân tích và gọi OpenAI bắt buộc phải chạy ở tiến trình nền (background worker/cron job), tuyệt đối không ảnh hưởng đến bất kỳ API phục vụ trực tiếp nào.
+*   **AC-002**: Toàn bộ luồng phân tích và gọi OpenAI được đóng gói bất đồng bộ trong background worker hoặc thông qua Admin API biệt lập, không ảnh hưởng đến bất kỳ API phục vụ trực tiếp nào.
 *   **AC-003**: Dữ liệu lưu vào bảng `ai_suggestions` phải đầy đủ các trường: `suggestion_type`, `source_value`, `suggested_value`, `confidence_score` và `status = 'pending'`.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Đặt giới hạn ngân sách (budget cap) và cảnh báo chi phí OpenAI hàng tháng trong file cấu hình để kiểm soát ngân sách chạy dự án.
+*   **BR-001**: Phải cung cấp API thủ công để hỗ trợ trigger debug trên môi trường local/development mà không bị phụ thuộc vào cron job.
 *   **BR-002**: Không tạo đề xuất trùng lặp. Nếu một đề xuất (`source_value` + `suggested_value` + `suggestion_type`) đã tồn tại trong bảng `ai_suggestions` với trạng thái `pending` hoặc `approved`, hệ thống sẽ bỏ qua và không insert mới.

@@ -23,6 +23,8 @@ export interface SearchResponse {
   page: number;
   page_size: number;
   total_pages: number;
+  spellcheck_corrected?: string;
+  auto_corrected?: boolean;
 }
 
 export interface SyncResponse {

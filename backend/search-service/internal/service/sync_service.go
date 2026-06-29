@@ -15,7 +15,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// SearchRepository defines the database interactions for search-service GORM repo
+type QueryStat struct {
+	Query string
+	Count int
+}
+
 type SearchRepository interface {
 	SaveTranslation(ctx context.Context, t *entity.ProductTranslation) error
 	SaveSyncJob(ctx context.Context, job *entity.SearchSyncJob) error
@@ -23,6 +27,20 @@ type SearchRepository interface {
 	GetFailedSyncJobs(ctx context.Context) ([]entity.SearchSyncJob, error)
 	GetProductByID(ctx context.Context, id string) (*entity.Product, error)
 	GetAllProductsByTenantID(ctx context.Context, tenantID string) ([]entity.Product, error)
+	GetSpellcheckRule(ctx context.Context, tenantID, typoWord string) (*entity.SpellcheckDictionary, error)
+	GetActiveTenants(ctx context.Context) ([]string, error)
+	GetZeroResultQueries(ctx context.Context, tenantID string, limit int) ([]QueryStat, error)
+	GetLowCTRQueries(ctx context.Context, tenantID string, limit int) ([]QueryStat, error)
+	SaveAISuggestion(ctx context.Context, sugg *entity.AISuggestion) error
+	GetAISuggestionByID(ctx context.Context, id string) (*entity.AISuggestion, error)
+	UpdateAISuggestionStatus(ctx context.Context, id, status string) error
+	SaveSpellcheckDictionary(ctx context.Context, entry *entity.SpellcheckDictionary) error
+	SaveSearchSynonym(ctx context.Context, entry *entity.SearchSynonym) error
+	GetAISuggestions(ctx context.Context, tenantID, status, suggestionType string) ([]entity.AISuggestion, error)
+	ApproveAISuggestion(ctx context.Context, tenantID, id string) (*entity.AISuggestion, error)
+	GetSpellcheckRules(ctx context.Context, tenantID string) ([]entity.SpellcheckDictionary, error)
+	GetSearchSynonyms(ctx context.Context, tenantID string) ([]entity.SearchSynonym, error)
+	GetTenantContextSummary(ctx context.Context, tenantID string) (string, error)
 }
 
 // ProductIndexer defines indexing operations for search indexing engine (OpenSearch)
@@ -30,7 +48,7 @@ type ProductIndexer interface {
 	IndexProduct(ctx context.Context, doc map[string]interface{}, productID string) error
 	UpdateProduct(ctx context.Context, doc map[string]interface{}, productID string) error
 	EnsureIndex(ctx context.Context)
-	SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error)
+	SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error)
 	SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
 }
 
@@ -40,6 +58,9 @@ type ProductCache interface {
 	CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
 	GetCachedSuggestions(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error)
 	CacheSuggestions(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error
+	GetCachedSpellcheck(ctx context.Context, tenantID, typoWord string) (string, bool, error)
+	CacheSpellcheck(ctx context.Context, tenantID, typoWord, correctWord string) error
+	DeleteSpellcheckCache(ctx context.Context, tenantID, typoWord string) error
 }
 
 // TranslationService defines translation operations
@@ -50,6 +71,11 @@ type TranslationService interface {
 // TagGenerator defines search tag generation logic
 type TagGenerator interface {
 	GenerateSearchTags(ctx context.Context, name, description string) ([]string, error)
+}
+
+// KeywordAnalyzer defines search log keyword correction analysis
+type KeywordAnalyzer interface {
+	AnalyzeKeywords(ctx context.Context, keywords []string, productsContext string) ([]entity.AISuggestion, error)
 }
 
 // SyncService orchestrates syncing incoming product ingestion events
@@ -234,9 +260,15 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 	}
 	suggestText := strings.Join(suggestNames, " ")
 
+	categoryID := ""
+	if product.CategoryID != nil {
+		categoryID = *product.CategoryID
+	}
+
 	doc := map[string]interface{}{
 		"id":              product.ID,
 		"tenant_id":       product.TenantID,
+		"category_id":     categoryID,
 		"product_name_vi": product.Name,
 		"product_name_en": nameEN,
 		"product_name_th": nameTH,

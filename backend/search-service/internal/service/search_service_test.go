@@ -46,13 +46,13 @@ func TestSearchService_CacheHit(t *testing.T) {
 	}
 
 	// Verify Indexer is NOT called
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
 		t.Fatal("Indexer should not be called on cache hit")
-		return nil, 0, nil
+		return nil, 0, "", nil
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
-	res, total, searchLogID, err := svc.Search(context.Background(), "tenant-1", "test-query", 1, 20)
+	res, total, searchLogID, _, _, err := svc.Search(context.Background(), "tenant-1", "test-query", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -88,8 +88,8 @@ func TestSearchService_CacheMiss(t *testing.T) {
 	indexedProducts := []map[string]interface{}{
 		{"id": "p-2", "product_name_vi": "Sản phẩm indexed"},
 	}
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error) {
-		return indexedProducts, 1, nil
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+		return indexedProducts, 1, "", nil
 	}
 
 	// Mock Cache Set
@@ -109,7 +109,7 @@ func TestSearchService_CacheMiss(t *testing.T) {
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
-	res, total, _, err := svc.Search(context.Background(), "tenant-1", "test-query", 1, 20)
+	res, total, _, _, _, err := svc.Search(context.Background(), "tenant-1", "test-query", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -144,16 +144,16 @@ func TestSearchService_Normalization(t *testing.T) {
 		return nil, 0, "", false, nil
 	}
 
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
 		// Verify query is normalized when searching in OpenSearch
 		if query != "ca phe sua" {
 			t.Errorf("Expected query to be normalized as 'ca phe sua', got: '%s'", query)
 		}
-		return nil, 0, nil
+		return nil, 0, "", nil
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
-	_, _, _, err := svc.Search(context.Background(), "tenant-1", "   Ca   phe   Sua   ", 1, 20)
+	_, _, _, _, _, err := svc.Search(context.Background(), "tenant-1", "   Ca   phe   Sua   ", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -166,7 +166,7 @@ func TestSearchService_QueryLengthLimit(t *testing.T) {
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
 	longQuery := strings.Repeat("a", 101)
-	_, _, _, err := svc.Search(context.Background(), "tenant-1", longQuery, 1, 20)
+	_, _, _, _, _, err := svc.Search(context.Background(), "tenant-1", longQuery, 1, 20)
 	if err == nil {
 		t.Fatal("Expected error for query longer than 100 characters, got nil")
 	}
@@ -303,5 +303,92 @@ func TestSearchService_Suggest_ShortQuery(t *testing.T) {
 	}
 	if len(res) != 0 {
 		t.Errorf("Expected 0 suggestions for short query, got: %v", res)
+	}
+}
+
+func TestSearchService_Spellcheck_Tier1(t *testing.T) {
+	indexer := NewMockProductIndexer()
+	cache := &MockProductCache{}
+	analytics := &MockAnalyticsRepository{}
+	repo := NewMockSearchRepository()
+
+	// Setup Tier 1: "ako" -> "akko"
+	repo.GetSpellcheckRuleFn = func(ctx context.Context, tenantID, typoWord string) (*entity.SpellcheckDictionary, error) {
+		if typoWord == "ako" {
+			return &entity.SpellcheckDictionary{
+				TenantID:    tenantID,
+				TypoWord:    "ako",
+				CorrectWord: "akko",
+				Status:      "active",
+			}, nil
+		}
+		return nil, nil
+	}
+
+	// We expect search to run for "akko"
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+		if query != "akko" {
+			t.Errorf("Expected search query to be corrected to 'akko', got '%s'", query)
+		}
+		return []map[string]interface{}{{"id": "p-1", "product_name_vi": "Bàn phím Akko"}}, 1, "", nil
+	}
+
+	svc := service.NewSearchService(indexer, cache, analytics, repo)
+	res, total, _, spellcheckCorrected, autoCorrected, err := svc.Search(context.Background(), "tenant-1", "ako", 1, 20)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if spellcheckCorrected != "akko" {
+		t.Errorf("Expected spellcheckCorrected to be 'akko', got '%s'", spellcheckCorrected)
+	}
+	if !autoCorrected {
+		t.Error("Expected autoCorrected to be true for Tier 1")
+	}
+	if len(res) != 1 || res[0]["id"] != "p-1" {
+		t.Errorf("Expected product 'Bàn phím Akko', got %v", res)
+	}
+	if total != 1 {
+		t.Errorf("Expected total 1, got %d", total)
+	}
+}
+
+func TestSearchService_Spellcheck_Tier2(t *testing.T) {
+	indexer := NewMockProductIndexer()
+	cache := &MockProductCache{}
+	analytics := &MockAnalyticsRepository{}
+	repo := NewMockSearchRepository()
+
+	// Tier 1 returns no corrections
+	repo.GetSpellcheckRuleFn = func(ctx context.Context, tenantID, typoWord string) (*entity.SpellcheckDictionary, error) {
+		return nil, nil
+	}
+
+	// OpenSearch returns suggestion "iphone" for query "iphne"
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+		if query != "iphne" {
+			t.Errorf("Expected query 'iphne' to be sent to indexer, got '%s'", query)
+		}
+		// Return 0 hits but suggests "iphone"
+		return []map[string]interface{}{}, 0, "iphone", nil
+	}
+
+	svc := service.NewSearchService(indexer, cache, analytics, repo)
+	res, total, _, spellcheckCorrected, autoCorrected, err := svc.Search(context.Background(), "tenant-1", "iphne", 1, 20)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if spellcheckCorrected != "iphone" {
+		t.Errorf("Expected spellcheckCorrected to be 'iphone', got '%s'", spellcheckCorrected)
+	}
+	if autoCorrected {
+		t.Error("Expected autoCorrected to be false for Tier 2 suggest")
+	}
+	if len(res) != 0 {
+		t.Errorf("Expected 0 products, got %d", len(res))
+	}
+	if total != 0 {
+		t.Errorf("Expected total 0, got %d", total)
 	}
 }

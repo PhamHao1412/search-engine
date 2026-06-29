@@ -21,6 +21,7 @@ import (
 	"search-service/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -46,6 +47,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect database: %v", err)
 	}
+	//seedDatabase(dbConn)
 
 	// 3. Connect Redis & OpenSearch Clients
 	redisClient, err := redis.Connect(cfg.RedisHost+":"+cfg.RedisPort, cfg.RedisPassword)
@@ -79,8 +81,15 @@ func main() {
 	tagGenerator := ai.NewTagGenerator(cfg.OpenAIAPIKey, cfg.OpenAIModel)
 	syncSvc := service.NewSyncService(searchRepo, productIndexer, productCache, translator, tagGenerator)
 
+	analyzer, ok := tagGenerator.(service.KeywordAnalyzer)
+	if !ok {
+		log.Fatalf("failed to cast tagGenerator to KeywordAnalyzer")
+	}
+	aiSvc := service.NewAISuggestionService(searchRepo, analyzer)
+
 	searchSvc := service.NewSearchService(productIndexer, productCache, analyticsRepo, searchRepo)
 	searchHandler := v1.NewSearchHandler(searchSvc, syncSvc)
+	adminHandler := v1.NewAdminHandler(searchRepo, productCache, aiSvc)
 
 	log.Printf("Initialized backend services: Database: %T, RedisCache: %T, OpenSearchIndexer: %T, AnalyticsRepository: %T, SyncService: %T\n", searchRepo, productCache, productIndexer, analyticsRepo, syncSvc)
 
@@ -100,7 +109,7 @@ func main() {
 		})
 	})
 
-	route.V1Router(r, searchHandler)
+	route.V1Router(r, searchHandler, adminHandler)
 
 	// 5. Start HTTP Server with Graceful Shutdown
 	srv := &http.Server{
@@ -127,4 +136,71 @@ func main() {
 	}
 
 	log.Println("Search API Service exited gracefully")
+}
+
+func seedDatabase(db *gorm.DB) {
+	log.Println("[Seeding] Checking categories and products category_id...")
+
+	// 1. Get tenants
+	var tenants []struct {
+		ID   string
+		Name string
+	}
+	if err := db.Table("product_svc.tenants").Find(&tenants).Error; err != nil {
+		log.Printf("[Seeding] Failed to fetch tenants: %v", err)
+		return
+	}
+
+	if len(tenants) == 0 {
+		log.Println("[Seeding] No tenants found.")
+		return
+	}
+
+	// 3. Categories
+	categories := []struct {
+		ID       string
+		TenantID string
+		Name     string
+	}{
+		{TenantID: "d3b07384-d113-4956-a5db-251d50c18d01", Name: "Bàn phím"},
+		{TenantID: "d3b07384-d113-4956-a5db-251d50c18d01", Name: "Chuột máy tính"},
+		{TenantID: "d3b07384-d113-4956-a5db-251d50c18d01", Name: "Tai nghe"},
+		{TenantID: "d3b07384-d113-4956-a5db-251d50c18d01", Name: "Thiết bị gia dụng"},
+	}
+	categories = append(categories, struct {
+		ID       string
+		TenantID string
+		Name     string
+	}{ID: "9c2ea5b2-2974-4b5c-897b-ea2f7d3cf2a5", TenantID: "25f2c7e4-92d7-4efb-a710-7bf77bc479a2", Name: "Mỹ phẩm"})
+
+	for _, cat := range categories {
+		var count int64
+		db.Table("product_svc.categories").Where("id = ?", cat.ID).Count(&count)
+		if count == 0 {
+			now := time.Now()
+			record := map[string]interface{}{
+				"tenant_id":  cat.TenantID,
+				"name":       cat.Name,
+				"created_at": now,
+				"updated_at": now,
+			}
+			if err := db.Table("product_svc.categories").Create(&record).Error; err != nil {
+				log.Printf("[Seeding] Failed to create category %s: %v", cat.Name, err)
+			} else {
+				log.Printf("[Seeding] Created category: %s", cat.Name)
+			}
+		}
+	}
+
+	// 3. Products category_id update
+	var products []struct {
+		ID   string
+		Name string
+	}
+	if err := db.Table("product_svc.products").Find(&products).Error; err != nil {
+		log.Printf("[Seeding] Failed to fetch products: %v", err)
+		return
+	}
+
+	log.Println("[Seeding] Database seeding check completed.")
 }

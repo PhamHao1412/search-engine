@@ -19,6 +19,20 @@ type MockSearchRepository struct {
 	GetFailedSyncJobsFn        func(ctx context.Context) ([]entity.SearchSyncJob, error)
 	GetProductByIDFn           func(ctx context.Context, id string) (*entity.Product, error)
 	GetAllProductsByTenantIDFn func(ctx context.Context, tenantID string) ([]entity.Product, error)
+	GetSpellcheckRuleFn        func(ctx context.Context, tenantID, typoWord string) (*entity.SpellcheckDictionary, error)
+	GetActiveTenantsFn         func(ctx context.Context) ([]string, error)
+	GetZeroResultQueriesFn     func(ctx context.Context, tenantID string, limit int) ([]service.QueryStat, error)
+	GetLowCTRQueriesFn         func(ctx context.Context, tenantID string, limit int) ([]service.QueryStat, error)
+	SaveAISuggestionFn         func(ctx context.Context, sugg *entity.AISuggestion) error
+	GetAISuggestionByIDFn      func(ctx context.Context, id string) (*entity.AISuggestion, error)
+	UpdateAISuggestionStatusFn func(ctx context.Context, id, status string) error
+	SaveSpellcheckDictionaryFn func(ctx context.Context, entry *entity.SpellcheckDictionary) error
+	SaveSearchSynonymFn        func(ctx context.Context, entry *entity.SearchSynonym) error
+	GetAISuggestionsFn         func(ctx context.Context, tenantID, status, suggestionType string) ([]entity.AISuggestion, error)
+	ApproveAISuggestionFn      func(ctx context.Context, tenantID, id string) (*entity.AISuggestion, error)
+	GetSpellcheckRulesFn       func(ctx context.Context, tenantID string) ([]entity.SpellcheckDictionary, error)
+	GetSearchSynonymsFn        func(ctx context.Context, tenantID string) ([]entity.SearchSynonym, error)
+	GetTenantContextSummaryFn  func(ctx context.Context, tenantID string) (string, error)
 
 	SavedJobs         map[string]*entity.SearchSyncJob
 	SavedTranslations []*entity.ProductTranslation
@@ -91,11 +105,109 @@ func (m *MockSearchRepository) GetAllProductsByTenantID(ctx context.Context, ten
 	return nil, nil
 }
 
+func (m *MockSearchRepository) GetSpellcheckRule(ctx context.Context, tenantID, typoWord string) (*entity.SpellcheckDictionary, error) {
+	if m.GetSpellcheckRuleFn != nil {
+		return m.GetSpellcheckRuleFn(ctx, tenantID, typoWord)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) GetActiveTenants(ctx context.Context) ([]string, error) {
+	if m.GetActiveTenantsFn != nil {
+		return m.GetActiveTenantsFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) GetZeroResultQueries(ctx context.Context, tenantID string, limit int) ([]service.QueryStat, error) {
+	if m.GetZeroResultQueriesFn != nil {
+		return m.GetZeroResultQueriesFn(ctx, tenantID, limit)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) GetLowCTRQueries(ctx context.Context, tenantID string, limit int) ([]service.QueryStat, error) {
+	if m.GetLowCTRQueriesFn != nil {
+		return m.GetLowCTRQueriesFn(ctx, tenantID, limit)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) SaveAISuggestion(ctx context.Context, sugg *entity.AISuggestion) error {
+	if m.SaveAISuggestionFn != nil {
+		return m.SaveAISuggestionFn(ctx, sugg)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) GetAISuggestionByID(ctx context.Context, id string) (*entity.AISuggestion, error) {
+	if m.GetAISuggestionByIDFn != nil {
+		return m.GetAISuggestionByIDFn(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) UpdateAISuggestionStatus(ctx context.Context, id, status string) error {
+	if m.UpdateAISuggestionStatusFn != nil {
+		return m.UpdateAISuggestionStatusFn(ctx, id, status)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) SaveSpellcheckDictionary(ctx context.Context, entry *entity.SpellcheckDictionary) error {
+	if m.SaveSpellcheckDictionaryFn != nil {
+		return m.SaveSpellcheckDictionaryFn(ctx, entry)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) SaveSearchSynonym(ctx context.Context, entry *entity.SearchSynonym) error {
+	if m.SaveSearchSynonymFn != nil {
+		return m.SaveSearchSynonymFn(ctx, entry)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) GetAISuggestions(ctx context.Context, tenantID, status, suggestionType string) ([]entity.AISuggestion, error) {
+	if m.GetAISuggestionsFn != nil {
+		return m.GetAISuggestionsFn(ctx, tenantID, status, suggestionType)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) ApproveAISuggestion(ctx context.Context, tenantID, id string) (*entity.AISuggestion, error) {
+	if m.ApproveAISuggestionFn != nil {
+		return m.ApproveAISuggestionFn(ctx, tenantID, id)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) GetSpellcheckRules(ctx context.Context, tenantID string) ([]entity.SpellcheckDictionary, error) {
+	if m.GetSpellcheckRulesFn != nil {
+		return m.GetSpellcheckRulesFn(ctx, tenantID)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) GetSearchSynonyms(ctx context.Context, tenantID string) ([]entity.SearchSynonym, error) {
+	if m.GetSearchSynonymsFn != nil {
+		return m.GetSearchSynonymsFn(ctx, tenantID)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) GetTenantContextSummary(ctx context.Context, tenantID string) (string, error) {
+	if m.GetTenantContextSummaryFn != nil {
+		return m.GetTenantContextSummaryFn(ctx, tenantID)
+	}
+	return "", nil
+}
+
 // MockProductIndexer implements service.ProductIndexer
 type MockProductIndexer struct {
 	IndexProductFn    func(ctx context.Context, doc map[string]interface{}, productID string) error
 	UpdateProductFn   func(ctx context.Context, doc map[string]interface{}, productID string) error
-	SearchProductsFn  func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error)
+	SearchProductsFn  func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error)
 	SuggestProductsFn func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
 	IndexedDocs       map[string]map[string]interface{}
 }
@@ -129,11 +241,11 @@ func (m *MockProductIndexer) UpdateProduct(ctx context.Context, doc map[string]i
 
 func (m *MockProductIndexer) EnsureIndex(ctx context.Context) {}
 
-func (m *MockProductIndexer) SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, error) {
+func (m *MockProductIndexer) SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
 	if m.SearchProductsFn != nil {
 		return m.SearchProductsFn(ctx, tenantID, query, from, size)
 	}
-	return nil, 0, nil
+	return nil, 0, "", nil
 }
 
 func (m *MockProductIndexer) SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
@@ -150,6 +262,8 @@ type MockProductCache struct {
 	CacheSearchFn          func(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
 	GetCachedSuggestionsFn func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error)
 	CacheSuggestionsFn     func(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error
+	GetCachedSpellcheckFn  func(ctx context.Context, tenantID, typoWord string) (string, bool, error)
+	CacheSpellcheckFn      func(ctx context.Context, tenantID, typoWord, correctWord string) error
 }
 
 func (m *MockProductCache) CacheProduct(ctx context.Context, tenantID, productID string, data map[string]interface{}) error {
@@ -184,6 +298,24 @@ func (m *MockProductCache) CacheSuggestions(ctx context.Context, tenantID, query
 	if m.CacheSuggestionsFn != nil {
 		return m.CacheSuggestionsFn(ctx, tenantID, query, suggestions)
 	}
+	return nil
+}
+
+func (m *MockProductCache) GetCachedSpellcheck(ctx context.Context, tenantID, typoWord string) (string, bool, error) {
+	if m.GetCachedSpellcheckFn != nil {
+		return m.GetCachedSpellcheckFn(ctx, tenantID, typoWord)
+	}
+	return "", false, nil
+}
+
+func (m *MockProductCache) CacheSpellcheck(ctx context.Context, tenantID, typoWord, correctWord string) error {
+	if m.CacheSpellcheckFn != nil {
+		return m.CacheSpellcheckFn(ctx, tenantID, typoWord, correctWord)
+	}
+	return nil
+}
+
+func (m *MockProductCache) DeleteSpellcheckCache(ctx context.Context, tenantID, typoWord string) error {
 	return nil
 }
 

@@ -80,8 +80,12 @@ frontend/
 
 ### B. Đối với Frontend (React)
 1.  **Debounce Autocomplete**: Bắt buộc phải cấu hình delay (debounce) tối thiểu 150ms khi gọi API Autocomplete từ ô tìm kiếm để bảo vệ tài nguyên hệ thống.
-2.  **Ghi Analytics bất đồng bộ**: Mọi sự kiện ghi Click Log phải được gửi ngầm bất đồng bộ bằng `fetch` với `keepalive: true` hoặc `navigator.sendBeacon` để không cản trở quá trình chuyển trang của người dùng.
+2.  **Ghi Analytics bất đồng bộ**: Mọi sự kiện ghi Click Log phải được gửi ngầm bất đồng bộ bằng `fetch` with `keepalive: true` hoặc `navigator.sendBeacon` để không cản trở quá trình chuyển trang của người dùng.
 3.  **Header mặc định**: Mọi HTTP request tới API của hệ thống phải tự động đính kèm `X-Tenant-ID` lấy từ cấu hình Tenant hiện tại của người dùng.
+
+### C. Quy tắc viết chú thích code (Code Comments)
+1.  **Ngôn ngữ**: Tất cả các đoạn chú thích (comment) trong code phải được viết hoàn toàn bằng **tiếng Anh** (English). Tuyệt đối không viết tiếng Việt hoặc kết hợp cả hai ngôn ngữ.
+2.  **Định dạng**: Mỗi dòng chú thích chỉ được mô tả trực tiếp nội dung đoạn mã bên dưới thực hiện việc gì. Tuyệt đối **không đánh số thứ tự** hoặc phân chia thành các bước (ví dụ: viết `Normalize query` thay vì `1. Normalize query`).
 
 ---
 

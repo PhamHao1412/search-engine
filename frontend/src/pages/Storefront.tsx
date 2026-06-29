@@ -72,6 +72,8 @@ const Storefront: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<{ product: Product; index: number } | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [debugInfo, setDebugInfo] = useState<SearchDebugInfo | null>(null);
+  const [spellcheckCorrected, setSpellcheckCorrected] = useState<string>('');
+  const [autoCorrected, setAutoCorrected] = useState<boolean>(false);
 
   // Simulation state for Redis Cache
   const searchHistoryRef = useRef<Set<string>>(new Set());
@@ -181,6 +183,8 @@ const Storefront: React.FC = () => {
       setTotal(res.total || 0);
       setTotalPages(res.total_pages || 1);
       setSearchLogId(res.search_log_id || '');
+      setSpellcheckCorrected(res.spellcheck_corrected || '');
+      setAutoCorrected(res.auto_corrected || false);
 
       // Simulate cache logic: if same query is searched within session, treat as Redis HIT
       const cacheKey = `${activeTenant.id}-${cleanTerm.toLowerCase()}-${targetPage}`;
@@ -191,6 +195,11 @@ const Storefront: React.FC = () => {
 
       // Generate debug panel metrics
       const debug = getSearchDebugInfo(cleanTerm || '(trống)', searchTimeMs, isCached && !!cleanTerm);
+      if (res.spellcheck_corrected) {
+        debug.spellcheck = res.spellcheck_corrected;
+      } else {
+        debug.spellcheck = '';
+      }
       setDebugInfo(debug);
     } catch (err: any) {
       console.error(err);
@@ -547,6 +556,55 @@ const Storefront: React.FC = () => {
                 Tenant: <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{activeTenant.name}</span>
               </div>
             </div>
+
+            {/* Spellcheck Notice Banner */}
+            {spellcheckCorrected && (
+              <div 
+                className="spellcheck-banner" 
+                style={{
+                  background: 'var(--card-bg)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.9rem',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                  animation: 'fadeIn 0.3s ease',
+                }}
+              >
+                <span style={{ color: 'var(--primary)', fontSize: '1.1rem' }}>✨</span>
+                {autoCorrected ? (
+                  <div>
+                    Hiển thị kết quả cho <strong style={{ color: 'var(--primary)' }}>{spellcheckCorrected}</strong> (thay vì <em>"{urlQuery || ''}"</em>)
+                  </div>
+                ) : (
+                  <div>
+                    Có phải bạn muốn tìm:{' '}
+                    <button
+                      onClick={() => {
+                        setSearchParams({ q: spellcheckCorrected });
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--primary)',
+                        fontWeight: 'bold',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        padding: 0,
+                        font: 'inherit',
+                      }}
+                    >
+                      {spellcheckCorrected}
+                    </button>
+                    ?
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Loading / Error States */}
             {loading ? (
