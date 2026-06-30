@@ -34,6 +34,8 @@ type MockSearchRepository struct {
 	GetSearchSynonymsFn        func(ctx context.Context, tenantID string) ([]entity.SearchSynonym, error)
 	GetTenantContextSummaryFn  func(ctx context.Context, tenantID string) (string, error)
 	GetAllTenantsFn            func(ctx context.Context) ([]entity.Tenant, error)
+	DeleteSpellcheckRuleFn     func(ctx context.Context, tenantID, id string) error
+	DeleteSearchSynonymFn      func(ctx context.Context, tenantID, id string) error
 
 	SavedJobs         map[string]*entity.SearchSyncJob
 	SavedTranslations []*entity.ProductTranslation
@@ -211,11 +213,25 @@ func (m *MockSearchRepository) GetAllTenants(ctx context.Context) ([]entity.Tena
 	return nil, nil
 }
 
+func (m *MockSearchRepository) DeleteSpellcheckRule(ctx context.Context, tenantID, id string) error {
+	if m.DeleteSpellcheckRuleFn != nil {
+		return m.DeleteSpellcheckRuleFn(ctx, tenantID, id)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) DeleteSearchSynonym(ctx context.Context, tenantID, id string) error {
+	if m.DeleteSearchSynonymFn != nil {
+		return m.DeleteSearchSynonymFn(ctx, tenantID, id)
+	}
+	return nil
+}
+
 // MockProductIndexer implements service.ProductIndexer
 type MockProductIndexer struct {
 	IndexProductFn    func(ctx context.Context, doc map[string]interface{}, productID string) error
 	UpdateProductFn   func(ctx context.Context, doc map[string]interface{}, productID string) error
-	SearchProductsFn  func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error)
+	SearchProductsFn  func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error)
 	SuggestProductsFn func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
 	IndexedDocs       map[string]map[string]interface{}
 }
@@ -249,9 +265,9 @@ func (m *MockProductIndexer) UpdateProduct(ctx context.Context, doc map[string]i
 
 func (m *MockProductIndexer) EnsureIndex(ctx context.Context) {}
 
-func (m *MockProductIndexer) SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+func (m *MockProductIndexer) SearchProducts(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
 	if m.SearchProductsFn != nil {
-		return m.SearchProductsFn(ctx, tenantID, query, from, size)
+		return m.SearchProductsFn(ctx, tenantID, query, synonymSegments, from, size)
 	}
 	return nil, 0, "", nil
 }
@@ -272,6 +288,9 @@ type MockProductCache struct {
 	CacheSuggestionsFn     func(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error
 	GetCachedSpellcheckFn  func(ctx context.Context, tenantID, typoWord string) (string, bool, error)
 	CacheSpellcheckFn      func(ctx context.Context, tenantID, typoWord, correctWord string) error
+	GetCachedSynonymsFn    func(ctx context.Context, tenantID string) (map[string][]string, bool, error)
+	CacheSynonymsFn        func(ctx context.Context, tenantID string, synonyms map[string][]string) error
+	DeleteSynonymsCacheFn  func(ctx context.Context, tenantID string) error
 }
 
 func (m *MockProductCache) CacheProduct(ctx context.Context, tenantID, productID string, data map[string]interface{}) error {
@@ -328,6 +347,27 @@ func (m *MockProductCache) DeleteSpellcheckCache(ctx context.Context, tenantID, 
 }
 
 func (m *MockProductCache) DeleteTenantCache(ctx context.Context, tenantID string) error {
+	return nil
+}
+
+func (m *MockProductCache) GetCachedSynonyms(ctx context.Context, tenantID string) (map[string][]string, bool, error) {
+	if m.GetCachedSynonymsFn != nil {
+		return m.GetCachedSynonymsFn(ctx, tenantID)
+	}
+	return nil, false, nil
+}
+
+func (m *MockProductCache) CacheSynonyms(ctx context.Context, tenantID string, synonyms map[string][]string) error {
+	if m.CacheSynonymsFn != nil {
+		return m.CacheSynonymsFn(ctx, tenantID, synonyms)
+	}
+	return nil
+}
+
+func (m *MockProductCache) DeleteSynonymsCache(ctx context.Context, tenantID string) error {
+	if m.DeleteSynonymsCacheFn != nil {
+		return m.DeleteSynonymsCacheFn(ctx, tenantID)
+	}
 	return nil
 }
 

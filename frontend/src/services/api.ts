@@ -388,4 +388,64 @@ export const adminApi = {
     const data = await response.json();
     return data.rules || [];
   },
+
+  async addSynonym(tenantId: string, keyword: string, synonym: string, isBidirectional: boolean): Promise<void> {
+    const response = await fetch(`${BASE_URL}/admin/dictionaries/synonyms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+      body: JSON.stringify({ keyword, synonym, is_bidirectional: isBidirectional }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to add synonym rule: ${response.status}`);
+    }
+  },
+
+  async deleteSynonym(tenantId: string, id: string): Promise<void> {
+    const response = await fetch(`${BASE_URL}/admin/dictionaries/synonyms/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete synonym rule: ${response.status}`);
+    }
+  },
+
+  async addSpellcheck(tenantId: string, typoWord: string, correctWord: string): Promise<void> {
+    const response = await fetch(`${BASE_URL}/admin/dictionaries/spellcheck`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+      body: JSON.stringify({ typo_word: typoWord, correct_word: correctWord }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to add spellcheck rule: ${response.status}`);
+    }
+  },
+
+  async deleteSpellcheck(tenantId: string, id: string): Promise<void> {
+    const response = await fetch(`${BASE_URL}/admin/dictionaries/spellcheck/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete spellcheck rule: ${response.status}`);
+    }
+  },
 };

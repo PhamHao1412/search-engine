@@ -16,7 +16,9 @@ import {
   Search,
   TrendingUp,
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  Plus,
+  X
 } from 'lucide-react';
 import { useTenant } from '../context/TenantContext';
 import { searchApi, adminApi, AISuggestion } from '../services/api';
@@ -65,6 +67,77 @@ const Admin: React.FC = () => {
   const [typoPage, setTypoPage] = useState(1);
   const [synonymPage, setSynonymPage] = useState(1);
   const itemsPerPage = 5;
+
+  // Create Manual Dictionary Rules states
+  const [showAddRuleModal, setShowAddRuleModal] = useState(false);
+  const [newRuleType, setNewRuleType] = useState<'synonym' | 'spellcheck'>('synonym');
+  const [newKeyword, setNewKeyword] = useState('');
+  const [newSynonym, setNewSynonym] = useState('');
+  const [isBidirectional, setIsBidirectional] = useState(false);
+  const [newTypoWord, setNewTypoWord] = useState('');
+  const [newCorrectWord, setNewCorrectWord] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const handleAddRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      if (newRuleType === 'synonym') {
+        if (!newKeyword.trim() || !newSynonym.trim()) {
+          alert('Vui lòng nhập đầy đủ Từ khóa chính và Từ đồng nghĩa');
+          setActionLoading(false);
+          return;
+        }
+        await adminApi.addSynonym(activeTenant.id, newKeyword.trim(), newSynonym.trim(), isBidirectional);
+      } else {
+        if (!newTypoWord.trim() || !newCorrectWord.trim()) {
+          alert('Vui lòng nhập đầy đủ Từ gõ sai và Từ sửa đúng');
+          setActionLoading(false);
+          return;
+        }
+        await adminApi.addSpellcheck(activeTenant.id, newTypoWord.trim(), newCorrectWord.trim());
+      }
+      
+      // Reset form states
+      setNewKeyword('');
+      setNewSynonym('');
+      setIsBidirectional(false);
+      setNewTypoWord('');
+      setNewCorrectWord('');
+      setShowAddRuleModal(false);
+
+      // Refresh dictionaries list and search suggestions
+      fetchDictionaries();
+      fetchTypoSuggestions();
+      fetchSynonymSuggestions();
+    } catch (err: any) {
+      alert(`Thêm quy tắc thất bại: ${err.message || 'Lỗi hệ thống'}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteSynonym = async (id: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa quy tắc từ đồng nghĩa này?')) return;
+    try {
+      await adminApi.deleteSynonym(activeTenant.id, id);
+      fetchDictionaries();
+      fetchSynonymSuggestions();
+    } catch (err: any) {
+      alert(`Xóa thất bại: ${err.message || 'Lỗi hệ thống'}`);
+    }
+  };
+
+  const handleDeleteSpellcheck = async (id: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa quy tắc sửa chính tả này?')) return;
+    try {
+      await adminApi.deleteSpellcheck(activeTenant.id, id);
+      fetchDictionaries();
+      fetchTypoSuggestions();
+    } catch (err: any) {
+      alert(`Xóa thất bại: ${err.message || 'Lỗi hệ thống'}`);
+    }
+  };
 
   // Load sync logs from localStorage on mount
   useEffect(() => {
@@ -292,7 +365,7 @@ const Admin: React.FC = () => {
             className={`admin-menu-item ${activeTab === 'dictionaries' ? 'active' : ''}`}
           >
             <BookOpen size={20} />
-            <span className="admin-menu-text">Từ điển hoạt động</span>
+            <span className="admin-menu-text">Cấu hình Từ khóa</span>
           </button>
 
           <button 
@@ -394,7 +467,7 @@ const Admin: React.FC = () => {
                 <div className="metric-card">
                   <div className="metric-card-bg-gradient" />
                   <div className="metric-card-header">
-                    <span className="metric-card-title">Từ điển hoạt động</span>
+                    <span className="metric-card-title">Cấu hình Từ khóa</span>
                     <div className="metric-card-icon" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary)' }}>
                       <BookOpen size={18} />
                     </div>
@@ -790,9 +863,18 @@ const Admin: React.FC = () => {
           {activeTab === 'dictionaries' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <section className="admin-card">
-                <div className="admin-card-title">
-                  <BookOpen size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Danh sách Từ điển đang hoạt động (Active Rules)</span>
+                <div className="admin-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <BookOpen size={18} style={{ color: 'var(--primary)' }} />
+                    <span>Danh sách cấu hình quy tắc từ khóa (Active Rules)</span>
+                  </div>
+                  <button 
+                    onClick={() => setShowAddRuleModal(true)} 
+                    className="btn btn-primary" 
+                    style={{ display: 'flex', gap: '6px', alignItems: 'center', height: '36px', fontSize: '0.85rem' }}
+                  >
+                    <Plus size={16} /> Thêm quy tắc mới
+                  </button>
                 </div>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>
                   Đây là các luật sửa chính tả và từ đồng nghĩa đang được hệ thống Search Engine áp dụng trực tiếp khi khách hàng gõ từ khóa.
@@ -809,7 +891,8 @@ const Admin: React.FC = () => {
                         <tr>
                           <th>Từ khóa chính (Keyword)</th>
                           <th>Các từ đồng nghĩa tương đương (Synonyms)</th>
-                          <th>Trạng thái hoạt động</th>
+                          <th>Status</th>
+                          <th style={{ width: '100px', textAlign: 'center' }}>Hành động</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -819,13 +902,22 @@ const Admin: React.FC = () => {
                               <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.keyword}</td>
                               <td style={{ fontWeight: 600, color: 'var(--success)' }}>{rule.synonym}</td>
                               <td>
-                                <span className="badge-status active">Hoạt động</span>
+                                <span className="badge-status active">ACTIVE</span>
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                <button 
+                                  onClick={() => handleDeleteSynonym(rule.id)}
+                                  className="btn btn-outline" 
+                                  style={{ padding: '4px 8px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.2)', height: '28px', fontSize: '0.75rem', fontWeight: 600 }}
+                                >
+                                  Xóa
+                                </button>
                               </td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px' }}>
+                            <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px' }}>
                               {loadingDictionaries ? 'Đang tải quy tắc đồng nghĩa...' : 'Chưa có quy tắc từ đồng nghĩa nào hoạt động.'}
                             </td>
                           </tr>
@@ -846,7 +938,8 @@ const Admin: React.FC = () => {
                         <tr>
                           <th>Từ gõ sai (Typo Word)</th>
                           <th>Từ sửa đúng (Correct Word)</th>
-                          <th>Trạng thái hoạt động</th>
+                          <th>Status</th>
+                          <th style={{ width: '100px', textAlign: 'center' }}>Hành động</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -856,13 +949,22 @@ const Admin: React.FC = () => {
                               <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.typo_word}</td>
                               <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{rule.correct_word}</td>
                               <td>
-                                <span className="badge-status active">Hoạt động</span>
+                                <span className="badge-status active">ACTIVE</span>
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                <button 
+                                  onClick={() => handleDeleteSpellcheck(rule.id)}
+                                  className="btn btn-outline" 
+                                  style={{ padding: '4px 8px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.2)', height: '28px', fontSize: '0.75rem', fontWeight: 600 }}
+                                >
+                                  Xóa
+                                </button>
                               </td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px' }}>
+                            <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px' }}>
                               {loadingDictionaries ? 'Đang tải từ điển sửa lỗi...' : 'Chưa có quy tắc sửa chính tả nào hoạt động.'}
                             </td>
                           </tr>
@@ -1000,6 +1102,206 @@ const Admin: React.FC = () => {
 
         <Footer />
       </div>
+
+      {showAddRuleModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div className="admin-card" style={{
+            width: '100%',
+            maxWidth: '500px',
+            margin: '20px',
+            position: 'relative',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
+            <button 
+              onClick={() => setShowAddRuleModal(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)'
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <div className="admin-card-title" style={{ marginBottom: '20px' }}>
+              <Plus size={18} style={{ color: 'var(--primary)' }} />
+              <span>Thêm Quy tắc Từ điển Thủ công</span>
+            </div>
+
+            <form onSubmit={handleAddRule}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                  Loại quy tắc
+                </label>
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="rule_type" 
+                      checked={newRuleType === 'synonym'} 
+                      onChange={() => setNewRuleType('synonym')} 
+                    />
+                    Từ đồng nghĩa (Synonym)
+                  </label>
+                  <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="rule_type" 
+                      checked={newRuleType === 'spellcheck'} 
+                      onChange={() => setNewRuleType('spellcheck')} 
+                    />
+                    Sửa lỗi chính tả (Spellcheck)
+                  </label>
+                </div>
+              </div>
+
+              {newRuleType === 'synonym' ? (
+                <>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                      Từ khóa chính (Keyword)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={newKeyword}
+                      onChange={(e) => setNewKeyword(e.target.value)}
+                      placeholder="Ví dụ: keyboard"
+                      style={{
+                        width: '100%',
+                        height: '40px',
+                        padding: '0 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1.5px solid var(--border-color)',
+                        fontSize: '0.85rem',
+                        backgroundColor: 'var(--bg-primary)',
+                        color: 'var(--text-primary)'
+                      }}
+                      required
+                    />
+                  </div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                      Từ đồng nghĩa (Synonym)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={newSynonym}
+                      onChange={(e) => setNewSynonym(e.target.value)}
+                      placeholder="Ví dụ: bàn phím"
+                      style={{
+                        width: '100%',
+                        height: '40px',
+                        padding: '0 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1.5px solid var(--border-color)',
+                        fontSize: '0.85rem',
+                        backgroundColor: 'var(--bg-primary)',
+                        color: 'var(--text-primary)'
+                      }}
+                      required
+                    />
+                  </div>
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={isBidirectional}
+                        onChange={(e) => setIsBidirectional(e.target.checked)}
+                      />
+                      Áp dụng quan hệ hai chiều (Bidirectional)
+                    </label>
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', marginLeft: '22px' }}>
+                      (Hệ thống tự động sinh quy tắc ngược lại: A &rarr; B và B &rarr; A)
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                      Từ gõ sai (Typo Word)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={newTypoWord}
+                      onChange={(e) => setNewTypoWord(e.target.value)}
+                      placeholder="Ví dụ: ban phin"
+                      style={{
+                        width: '100%',
+                        height: '40px',
+                        padding: '0 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1.5px solid var(--border-color)',
+                        fontSize: '0.85rem',
+                        backgroundColor: 'var(--bg-primary)',
+                        color: 'var(--text-primary)'
+                      }}
+                      required
+                    />
+                  </div>
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                      Từ sửa đúng (Correct Word)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={newCorrectWord}
+                      onChange={(e) => setNewCorrectWord(e.target.value)}
+                      placeholder="Ví dụ: bàn phím"
+                      style={{
+                        width: '100%',
+                        height: '40px',
+                        padding: '0 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1.5px solid var(--border-color)',
+                        fontSize: '0.85rem',
+                        backgroundColor: 'var(--bg-primary)',
+                        color: 'var(--text-primary)'
+                      }}
+                      required
+                    />
+                  </div>
+                </>
+              )}
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddRuleModal(false)} 
+                  className="btn btn-outline"
+                  style={{ height: '38px', fontSize: '0.85rem' }}
+                >
+                  Hủy
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={actionLoading}
+                  className="btn btn-primary"
+                  style={{ height: '38px', fontSize: '0.85rem', minWidth: '100px' }}
+                >
+                  {actionLoading ? 'Đang tạo...' : 'Lưu quy tắc'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

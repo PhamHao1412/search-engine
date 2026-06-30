@@ -51,6 +51,8 @@ type SearchRepository interface {
 	GetSearchSynonyms(ctx context.Context, tenantID string) ([]entity.SearchSynonym, error)
 	GetTenantContextSummary(ctx context.Context, tenantID string) (string, error)
 	GetAllTenants(ctx context.Context) ([]entity.Tenant, error)
+	DeleteSpellcheckRule(ctx context.Context, tenantID, id string) error
+	DeleteSearchSynonym(ctx context.Context, tenantID, id string) error
 }
 
 // ProductIndexer defines indexing operations for search indexing engine (OpenSearch)
@@ -58,7 +60,7 @@ type ProductIndexer interface {
 	IndexProduct(ctx context.Context, doc map[string]interface{}, productID string) error
 	UpdateProduct(ctx context.Context, doc map[string]interface{}, productID string) error
 	EnsureIndex(ctx context.Context)
-	SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error)
+	SearchProducts(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error)
 	SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
 }
 
@@ -72,6 +74,9 @@ type ProductCache interface {
 	CacheSpellcheck(ctx context.Context, tenantID, typoWord, correctWord string) error
 	DeleteSpellcheckCache(ctx context.Context, tenantID, typoWord string) error
 	DeleteTenantCache(ctx context.Context, tenantID string) error
+	GetCachedSynonyms(ctx context.Context, tenantID string) (map[string][]string, bool, error)
+	CacheSynonyms(ctx context.Context, tenantID string, synonyms map[string][]string) error
+	DeleteSynonymsCache(ctx context.Context, tenantID string) error
 }
 
 // TranslationService defines translation operations

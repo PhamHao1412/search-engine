@@ -1,11 +1,15 @@
 package v1
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
 	"net/http"
+	"search-service/internal/entity"
 	"search-service/internal/service"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -196,4 +200,187 @@ func (h *AdminHandler) GenerateAISuggestions(c *gin.Context) {
 		"status":  "success",
 		"message": "AI Suggestions generated successfully",
 	})
+}
+
+func (h *AdminHandler) CreateSynonym(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	type CreateSynonymReq struct {
+		Keyword         string `json:"keyword" binding:"required"`
+		Synonym         string `json:"synonym" binding:"required"`
+		IsBidirectional bool   `json:"is_bidirectional"`
+	}
+
+	var req CreateSynonymReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	keywordClean := strings.TrimSpace(req.Keyword)
+	synonymClean := strings.TrimSpace(req.Synonym)
+	if keywordClean == "" || synonymClean == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Keyword and Synonym cannot be empty"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// 1. Create main synonym A -> B
+	syn1 := &entity.SearchSynonym{
+		ID:        h.newUUID(),
+		TenantID:  tenantID,
+		Keyword:   keywordClean,
+		Synonym:   synonymClean,
+		Status:    "active",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := h.repo.SaveSearchSynonym(ctx, syn1); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to save synonym: %v", err)})
+		return
+	}
+
+	// 2. Create reverse synonym B -> A if bidirectional
+	if req.IsBidirectional {
+		syn2 := &entity.SearchSynonym{
+			ID:        h.newUUID(),
+			TenantID:  tenantID,
+			Keyword:   synonymClean,
+			Synonym:   keywordClean,
+			Status:    "active",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		if err := h.repo.SaveSearchSynonym(ctx, syn2); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to save bidirectional synonym: %v", err)})
+			return
+		}
+	}
+
+	// 3. Invalidate caches
+	_ = h.cache.DeleteTenantCache(ctx, tenantID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Synonym created successfully",
+	})
+}
+
+func (h *AdminHandler) DeleteSynonym(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Synonym ID is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := h.repo.DeleteSearchSynonym(ctx, tenantID, id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete synonym: %v", err)})
+		return
+	}
+
+	// Invalidate caches
+	_ = h.cache.DeleteTenantCache(ctx, tenantID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Synonym deleted successfully",
+	})
+}
+
+func (h *AdminHandler) CreateSpellcheck(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	type CreateSpellcheckReq struct {
+		TypoWord    string `json:"typo_word" binding:"required"`
+		CorrectWord string `json:"correct_word" binding:"required"`
+	}
+
+	var req CreateSpellcheckReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	typoClean := strings.TrimSpace(req.TypoWord)
+	correctClean := strings.TrimSpace(req.CorrectWord)
+	if typoClean == "" || correctClean == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "TypoWord and CorrectWord cannot be empty"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	entry := &entity.SpellcheckDictionary{
+		ID:          h.newUUID(),
+		TenantID:    tenantID,
+		TypoWord:    typoClean,
+		CorrectWord: correctClean,
+		Status:      "active",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	if err := h.repo.SaveSpellcheckDictionary(ctx, entry); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to save spellcheck rule: %v", err)})
+		return
+	}
+
+	// Invalidate caches
+	_ = h.cache.DeleteTenantCache(ctx, tenantID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Spellcheck rule created successfully",
+	})
+}
+
+func (h *AdminHandler) DeleteSpellcheck(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Spellcheck ID is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := h.repo.DeleteSpellcheckRule(ctx, tenantID, id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete spellcheck rule: %v", err)})
+		return
+	}
+
+	// Invalidate caches
+	_ = h.cache.DeleteTenantCache(ctx, tenantID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Spellcheck rule deleted successfully",
+	})
+}
+
+func (h *AdminHandler) newUUID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }

@@ -24,5 +24,9 @@ func V1Router(r *gin.Engine, searchHandler *v1.SearchHandler, adminHandler *v1.A
 	apiV1.POST("/admin/ai/suggestions/:id/reject", adminHandler.RejectAISuggestion)
 	apiV1.POST("/admin/ai/suggestions/generate", adminHandler.GenerateAISuggestions)
 	apiV1.GET("/admin/dictionaries/spellcheck", adminHandler.GetSpellcheckRules)
+	apiV1.POST("/admin/dictionaries/spellcheck", adminHandler.CreateSpellcheck)
+	apiV1.DELETE("/admin/dictionaries/spellcheck/:id", adminHandler.DeleteSpellcheck)
 	apiV1.GET("/admin/dictionaries/synonyms", adminHandler.GetSearchSynonyms)
+	apiV1.POST("/admin/dictionaries/synonyms", adminHandler.CreateSynonym)
+	apiV1.DELETE("/admin/dictionaries/synonyms/:id", adminHandler.DeleteSynonym)
 }

@@ -226,7 +226,7 @@ func (idx *opensearchIndexer) EnsureIndex(ctx context.Context) {
 	}
 }
 
-func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
 	var innerQuery map[string]interface{}
 	trimmedQuery := strings.TrimSpace(query)
 	if trimmedQuery == "" {
@@ -245,11 +245,6 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 			},
 		}
 	} else {
-		// Split search query by space for exact/bool matching
-		tokens := strings.Fields(trimmedQuery)
-		mustClauses := make([]interface{}, 0, len(tokens))
-
-		// Target fields: name (boosted), description, brand, tags, and autocomplete suggestions
 		targetFields := []string{
 			"product_name_vi^4",
 			"product_name_en^2",
@@ -260,23 +255,79 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 			"suggest",
 		}
 
-		for _, token := range tokens {
+		searchClauses := make([]interface{}, 0)
+
+		// Process synonym segments
+		for _, segment := range synonymSegments {
+			if len(segment) == 0 {
+				continue
+			}
+
+			if len(segment) == 1 {
+				// Standard token match (no synonyms)
+				searchClauses = append(searchClauses, map[string]interface{}{
+					"multi_match": map[string]interface{}{
+						"query":                segment[0],
+						"fields":               targetFields,
+						"type":                 "best_fields",
+						"minimum_should_match": "100%",
+					},
+				})
+			} else {
+				// Synonym segment: wrap in a bool should block
+				shouldClauses := make([]interface{}, 0, len(segment))
+
+				// Original term (boost = 1.0)
+				shouldClauses = append(shouldClauses, map[string]interface{}{
+					"multi_match": map[string]interface{}{
+						"query":                segment[0],
+						"fields":               targetFields,
+						"type":                 "best_fields",
+						"minimum_should_match": "100%",
+					},
+				})
+
+				// Synonym terms (boost = 0.6)
+				for _, syn := range segment[1:] {
+					shouldClauses = append(shouldClauses, map[string]interface{}{
+						"multi_match": map[string]interface{}{
+							"query":                syn,
+							"fields":               targetFields,
+							"type":                 "best_fields",
+							"minimum_should_match": "100%",
+							"boost":                0.6,
+						},
+					})
+				}
+
+				// The search clause requires matching at least one in shouldClauses
+				searchClauses = append(searchClauses, map[string]interface{}{
+					"bool": map[string]interface{}{
+						"should":               shouldClauses,
+						"minimum_should_match": 1,
+					},
+				})
+			}
+		}
+
+		// Filters that must match
+		mustClauses := []interface{}{
+			map[string]interface{}{
+				"term": map[string]interface{}{
+					"tenant_id": tenantID,
+				},
+			},
+		}
+
+		// Only add search query block if there are search clauses
+		if len(searchClauses) > 0 {
 			mustClauses = append(mustClauses, map[string]interface{}{
-				"multi_match": map[string]interface{}{
-					"query":                token,
-					"fields":               targetFields,
-					"type":                 "best_fields",
-					"minimum_should_match": "100%",
+				"bool": map[string]interface{}{
+					"should":               searchClauses,
+					"minimum_should_match": "50%",
 				},
 			})
 		}
-
-		// Tenant restriction
-		mustClauses = append(mustClauses, map[string]interface{}{
-			"term": map[string]interface{}{
-				"tenant_id": tenantID,
-			},
-		})
 
 		innerQuery = map[string]interface{}{
 			"bool": map[string]interface{}{
@@ -378,6 +429,8 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 	if err != nil {
 		return nil, 0, "", err
 	}
+
+	log.Printf("[DEBUG SearchProducts Query] JSON payload: %s", string(bodyBytes))
 
 	req := opensearchapi.SearchRequest{
 		Index: []string{"products"},

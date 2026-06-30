@@ -147,3 +147,33 @@ func (c *redisCache) DeleteTenantCache(ctx context.Context, tenantID string) err
 	}
 	return nil
 }
+
+func (c *redisCache) GetCachedSynonyms(ctx context.Context, tenantID string) (map[string][]string, bool, error) {
+	redisKey := fmt.Sprintf("tenant:%s:synonyms", tenantID)
+	val, err := c.client.Get(ctx, redisKey).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+
+	var synonyms map[string][]string
+	if err := json.Unmarshal([]byte(val), &synonyms); err != nil {
+		return nil, false, err
+	}
+	return synonyms, true, nil
+}
+
+func (c *redisCache) CacheSynonyms(ctx context.Context, tenantID string, synonyms map[string][]string) error {
+	redisKey := fmt.Sprintf("tenant:%s:synonyms", tenantID)
+	val, err := json.Marshal(synonyms)
+	if err != nil {
+		return err
+	}
+	return c.client.Set(ctx, redisKey, string(val), 24*time.Hour).Err()
+}
+
+func (c *redisCache) DeleteSynonymsCache(ctx context.Context, tenantID string) error {
+	redisKey := fmt.Sprintf("tenant:%s:synonyms", tenantID)
+	return c.client.Del(ctx, redisKey).Err()
+}

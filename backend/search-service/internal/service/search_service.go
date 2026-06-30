@@ -75,7 +75,18 @@ func (s *searchService) Search(ctx context.Context, tenantID, query string, page
 		size = 20
 	}
 
-	products, total, opensearchSuggest, err := s.indexer.SearchProducts(ctx, tenantID, searchQuery, from, size)
+	// Load synonyms for current tenant
+	synonyms, synErr := s.loadSynonyms(ctx, tenantID)
+	if synErr != nil {
+		log.Printf("Warning: Failed to load synonyms for tenant %s: %v", tenantID, synErr)
+	}
+
+	// Expand search query with synonyms
+	synonymSegments := s.ExpandQuery(searchQuery, synonyms)
+	log.Printf("[DEBUG Search] tenantID: %s, searchQuery: %q, loaded synonyms count: %d, synonymSegments: %+v",
+		tenantID, searchQuery, len(synonyms), synonymSegments)
+
+	products, total, opensearchSuggest, err := s.indexer.SearchProducts(ctx, tenantID, searchQuery, synonymSegments, from, size)
 	if err != nil {
 		return nil, 0, "", "", false, err
 	}
@@ -235,4 +246,116 @@ func (s *searchService) GetProductByID(ctx context.Context, tenantID, productID 
 		return nil, fmt.Errorf("product not found under this tenant")
 	}
 	return p, nil
+}
+
+func (s *searchService) loadSynonyms(ctx context.Context, tenantID string) (map[string][]string, error) {
+	if s.repo == nil {
+		return make(map[string][]string), nil
+	}
+
+	if s.cache != nil {
+		cached, found, err := s.cache.GetCachedSynonyms(ctx, tenantID)
+		if err == nil && found {
+			return cached, nil
+		}
+	}
+
+	// Retrieve from Postgres
+	dbRules, err := s.repo.GetSearchSynonyms(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	synonyms := make(map[string][]string)
+	for _, rule := range dbRules {
+		key := removeDiacritics(strings.ToLower(strings.TrimSpace(rule.Keyword)))
+		val := strings.ToLower(strings.TrimSpace(rule.Synonym))
+		if key != "" && val != "" {
+			synonyms[key] = append(synonyms[key], val)
+		}
+	}
+
+	if s.cache != nil {
+		_ = s.cache.CacheSynonyms(ctx, tenantID, synonyms)
+	}
+
+	return synonyms, nil
+}
+
+func (s *searchService) ExpandQuery(query string, synonyms map[string][]string) [][]string {
+	words := strings.Fields(query)
+	n := len(words)
+	if n == 0 {
+		return nil
+	}
+
+	noAccentWords := make([]string, n)
+	for i, w := range words {
+		noAccentWords[i] = removeDiacritics(w)
+	}
+
+	var segments [][]string
+	i := 0
+	for i < n {
+		matched := false
+		for length := n - i; length >= 2; length-- {
+			phraseNoAccent := strings.Join(noAccentWords[i:i+length], " ")
+			if expanded, found := synonyms[phraseNoAccent]; found {
+				originalPhrase := strings.Join(words[i:i+length], " ")
+				segment := []string{originalPhrase}
+				seen := map[string]bool{originalPhrase: true}
+				for _, exp := range expanded {
+					if !seen[exp] {
+						segment = append(segment, exp)
+						seen[exp] = true
+					}
+				}
+				segments = append(segments, segment)
+				i += length
+				matched = true
+				break
+			}
+		}
+
+		if !matched {
+			wordNoAccent := noAccentWords[i]
+			if expanded, found := synonyms[wordNoAccent]; found {
+				originalWord := words[i]
+				segment := []string{originalWord}
+				seen := map[string]bool{originalWord: true}
+				for _, exp := range expanded {
+					if !seen[exp] {
+						segment = append(segment, exp)
+						seen[exp] = true
+					}
+				}
+				segments = append(segments, segment)
+			} else {
+				segments = append(segments, []string{words[i]})
+			}
+			i++
+		}
+	}
+
+	return segments
+}
+
+func removeDiacritics(s string) string {
+	s = strings.ToLower(s)
+	replacer := strings.NewReplacer(
+		"à", "a", "á", "a", "ả", "a", "ã", "a", "ạ", "a",
+		"ă", "a", "ằ", "a", "ắ", "a", "ẳ", "a", "ẵ", "a", "ặ", "a",
+		"â", "a", "ầ", "a", "ấ", "a", "ẩ", "a", "ẫ", "a", "ậ", "a",
+		"đ", "d",
+		"è", "e", "é", "e", "ẻ", "e", "ẽ", "e", "ẹ", "e",
+		"ê", "e", "ề", "e", "ế", "e", "ể", "e", "ễ", "e", "ệ", "e",
+		"ì", "i", "í", "i", "ỉ", "i", "ĩ", "i", "ị", "i",
+		"ò", "o", "ó", "o", "ỏ", "o", "õ", "o", "ọ", "o",
+		"ô", "o", "ồ", "o", "ố", "o", "ổ", "o", "ỗ", "o", "ộ", "o",
+		"ơ", "o", "ờ", "o", "ớ", "o", "ở", "o", "ỡ", "o", "ợ", "o",
+		"ù", "u", "ú", "u", "ủ", "u", "ũ", "u", "ụ", "u",
+		"ư", "u", "ừ", "u", "ứ", "u", "ử", "u", "ữ", "u", "ự", "u",
+		"ỳ", "y", "ý", "y", "ỷ", "y", "ỹ", "y", "ỵ", "y",
+	)
+	return replacer.Replace(s)
 }

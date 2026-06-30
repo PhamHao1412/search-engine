@@ -305,3 +305,15 @@ func (r *searchRepository) GetAllTenants(ctx context.Context) ([]entity.Tenant, 
 	err := r.db.WithContext(ctx).Order("name ASC").Find(&list).Error
 	return list, err
 }
+
+func (r *searchRepository) DeleteSpellcheckRule(ctx context.Context, tenantID, id string) error {
+	return r.db.WithContext(ctx).Table("search_svc.spellcheck_dictionary").
+		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Delete(&entity.SpellcheckDictionary{}).Error
+}
+
+func (r *searchRepository) DeleteSearchSynonym(ctx context.Context, tenantID, id string) error {
+	return r.db.WithContext(ctx).Table("search_svc.search_synonyms").
+		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Delete(&entity.SearchSynonym{}).Error
+}

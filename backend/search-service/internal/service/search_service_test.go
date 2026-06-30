@@ -46,7 +46,7 @@ func TestSearchService_CacheHit(t *testing.T) {
 	}
 
 	// Verify Indexer is NOT called
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
 		t.Fatal("Indexer should not be called on cache hit")
 		return nil, 0, "", nil
 	}
@@ -88,7 +88,7 @@ func TestSearchService_CacheMiss(t *testing.T) {
 	indexedProducts := []map[string]interface{}{
 		{"id": "p-2", "product_name_vi": "Sản phẩm indexed"},
 	}
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
 		return indexedProducts, 1, "", nil
 	}
 
@@ -144,7 +144,7 @@ func TestSearchService_Normalization(t *testing.T) {
 		return nil, 0, "", false, nil
 	}
 
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
 		// Verify query is normalized when searching in OpenSearch
 		if query != "ca phe sua" {
 			t.Errorf("Expected query to be normalized as 'ca phe sua', got: '%s'", query)
@@ -326,7 +326,7 @@ func TestSearchService_Spellcheck_Tier1(t *testing.T) {
 	}
 
 	// We expect search to run for "akko"
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
 		if query != "akko" {
 			t.Errorf("Expected search query to be corrected to 'akko', got '%s'", query)
 		}
@@ -365,7 +365,7 @@ func TestSearchService_Spellcheck_Tier2(t *testing.T) {
 	}
 
 	// OpenSearch returns suggestion "iphone" for query "iphne"
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
 		if query != "iphne" {
 			t.Errorf("Expected query 'iphne' to be sent to indexer, got '%s'", query)
 		}
