@@ -6,31 +6,34 @@ import { searchApi } from '../services/api';
 import { Suggestion } from '../types';
 import Footer from '../components/Footer';
 
-const HOT_SUGGESTIONS: Record<string, string[]> = {
-  'd3b07384-d113-4956-a5db-251d50c18d01': [
-    'Bàn phím cơ Akko',
-    'Chuột Logitech G Pro',
-    'Bàn phím Ajazz',
-    'Chuột không dây',
-    'Keycap'
-  ],
-  'a1a2a3a4-b1b2-c1c2-d1d2-e1e2e3e4e5e6': [
-    'Son dưỡng môi',
-    'Son môi đỏ',
-    'Mỹ phẩm dưỡng da',
-    'Lip balm',
-    'Kem chống nắng'
-  ],
-};
+// Dynamic hot keywords are loaded from search logs API
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { activeTenant } = useTenant();
+  const [activeLang, setActiveLang] = useState<'vi' | 'en' | 'th'>(
+    (localStorage.getItem('swiftsearch_search_lang') as 'vi' | 'en' | 'th') || 'vi'
+  );
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [hotKeywords, setHotKeywords] = useState<string[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load real-time hot keywords
+  useEffect(() => {
+    const loadHotKeywords = async () => {
+      const keywords = await searchApi.getHotKeywords(activeTenant.id);
+      setHotKeywords(keywords);
+    };
+    loadHotKeywords();
+  }, [activeTenant.id, activeLang]);
+
+  const handleLangChange = (lang: 'vi' | 'en' | 'th') => {
+    setActiveLang(lang);
+    localStorage.setItem('swiftsearch_search_lang', lang);
+  };
 
   // Debounced API call for Autocomplete suggestions
   useEffect(() => {
@@ -110,10 +113,35 @@ const Home: React.FC = () => {
       <header className="header">
         <div className="header-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <ShoppingBag className="text-gradient" size={26} strokeWidth={2.5} />
-          <span>Amaze<span style={{ color: 'var(--primary)' }}>Search</span></span>
+          <span>Swift<span style={{ color: 'var(--primary)' }}>Search</span></span>
         </div>
 
         <div className="header-actions">
+          {/* Active Language Selector */}
+          <div className="lang-selector">
+            <span 
+              className={`lang-flag ${activeLang === 'vi' ? 'active' : ''}`}
+              onClick={() => handleLangChange('vi')}
+              title="Tiếng Việt (Gốc)"
+            >
+              🇻🇳
+            </span>
+            <span 
+              className={`lang-flag ${activeLang === 'en' ? 'active' : ''}`}
+              onClick={() => handleLangChange('en')}
+              title="Tiếng Anh (Dịch)"
+            >
+              🇺🇸
+            </span>
+            <span 
+              className={`lang-flag ${activeLang === 'th' ? 'active' : ''}`}
+              onClick={() => handleLangChange('th')}
+              title="Tiếng Thái (Dịch)"
+            >
+              🇹🇭
+            </span>
+          </div>
+
           <button onClick={() => navigate('/admin')} className="btn btn-outline">
             Admin
             <ArrowRight size={16} />
@@ -176,7 +204,6 @@ const Home: React.FC = () => {
               }}>
                 {suggestions.map((suggestion, index) => {
                   const isOutOfStock = suggestion.inventory <= 0;
-                  const translatedSubtitle = suggestion.product_name_en || '';
 
                   return (
                     <div
@@ -223,10 +250,21 @@ const Home: React.FC = () => {
                       {/* Middle: Product info */}
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                         <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {suggestion.product_name_vi}
+                          {activeLang === 'en' && suggestion.product_name_en 
+                            ? suggestion.product_name_en 
+                            : activeLang === 'th' && suggestion.product_name_th 
+                              ? suggestion.product_name_th 
+                              : suggestion.product_name_vi}
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {suggestion.brand || 'Chưa phân loại'} {translatedSubtitle ? `• ${translatedSubtitle}` : ''}
+                          {suggestion.brand || 'Chưa phân loại'} {(() => {
+                            const desc = activeLang === 'en' && suggestion.description_en 
+                              ? suggestion.description_en 
+                              : activeLang === 'th' && suggestion.description_th 
+                                ? suggestion.description_th 
+                                : suggestion.description_vi;
+                            return desc ? `• ${desc}` : '';
+                          })()}
                         </span>
                       </div>
 
@@ -251,7 +289,7 @@ const Home: React.FC = () => {
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
               <Sparkles size={14} style={{ color: 'var(--warning)' }} /> Từ khóa hot:
             </span>
-            {HOT_SUGGESTIONS[activeTenant.id]?.map((suggest) => (
+            {hotKeywords.map((suggest) => (
               <button
                 key={suggest}
                 onClick={() => handleHotSuggestionClick(suggest)}

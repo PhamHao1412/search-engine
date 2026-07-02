@@ -2,6 +2,16 @@ import { SearchResponse, SyncResponse, ClickTrackRequest, SearchDebugInfo, Sugge
 
 const BASE_URL = '/api/v1';
 
+const getHeaders = (tenantId: string, additional: Record<string, string> = {}): Record<string, string> => {
+  const lang = localStorage.getItem('swiftsearch_search_lang') || 'vi';
+  return {
+    'Accept': 'application/json',
+    'X-Tenant-ID': tenantId,
+    'X-Language-Key': lang,
+    ...additional,
+  };
+};
+
 export const searchApi = {
   /**
    * Search products by query, page, page_size
@@ -10,7 +20,8 @@ export const searchApi = {
     query: string,
     page: number,
     pageSize: number,
-    tenantId: string
+    tenantId: string,
+    lang?: string
   ): Promise<SearchResponse> {
     const params = new URLSearchParams({
       q: query,
@@ -20,10 +31,7 @@ export const searchApi = {
 
     const response = await fetch(`${BASE_URL}/search?${params.toString()}`, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'X-Tenant-ID': tenantId,
-      },
+      headers: getHeaders(tenantId, lang ? { 'X-Language-Key': lang } : {}),
     });
 
     if (!response.ok) {
@@ -40,10 +48,7 @@ export const searchApi = {
   async syncDatabase(tenantId: string): Promise<SyncResponse> {
     const response = await fetch(`${BASE_URL}/search/sync`, {
       method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'X-Tenant-ID': tenantId,
-      },
+      headers: getHeaders(tenantId),
     });
 
     if (!response.ok) {
@@ -59,10 +64,7 @@ export const searchApi = {
    */
   trackClick(payload: ClickTrackRequest, tenantId: string): void {
     const url = `${BASE_URL}/analytics/click`;
-    const headers = {
-      'Content-Type': 'application/json',
-      'X-Tenant-ID': tenantId,
-    };
+    const headers = getHeaders(tenantId, { 'Content-Type': 'application/json' });
 
     // Use keepalive: true to ensure the request is not aborted if the page unloads
     fetch(url, {
@@ -86,10 +88,7 @@ export const searchApi = {
       const params = new URLSearchParams({ q: query.trim() });
       const response = await fetch(`${BASE_URL}/suggest?${params.toString()}`, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'X-Tenant-ID': tenantId,
-        },
+        headers: getHeaders(tenantId),
       });
 
       if (!response.ok) {
@@ -110,10 +109,7 @@ export const searchApi = {
   async getProduct(id: string, tenantId: string): Promise<Product> {
     const response = await fetch(`${BASE_URL}/products/${id}`, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'X-Tenant-ID': tenantId,
-      },
+      headers: getHeaders(tenantId),
     });
 
     if (!response.ok) {
@@ -121,6 +117,28 @@ export const searchApi = {
     }
 
     return response.json();
+  },
+
+  /**
+   * Fetch dynamic hot keywords based on real search queries
+   */
+  async getHotKeywords(tenantId: string): Promise<string[]> {
+    try {
+      const response = await fetch(`${BASE_URL}/search/hot-keywords`, {
+        method: 'GET',
+        headers: getHeaders(tenantId),
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      return data.keywords || [];
+    } catch (err) {
+      console.warn('Failed to fetch hot keywords:', err);
+      return [];
+    }
   },
 };
 

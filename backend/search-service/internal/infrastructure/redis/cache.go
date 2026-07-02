@@ -31,8 +31,8 @@ func (c *redisCache) CacheProduct(ctx context.Context, tenantID, productID strin
 	return c.client.Set(ctx, redisKey, string(val), 24*time.Hour).Err()
 }
 
-func (c *redisCache) GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
-	redisKey := fmt.Sprintf("search:%s:%s:%d:%d", tenantID, query, page, pageSize)
+func (c *redisCache) GetCachedSearch(ctx context.Context, tenantID, query, lang string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
+	redisKey := fmt.Sprintf("search:%s:%s:%s:%d:%d", tenantID, query, lang, page, pageSize)
 	val, err := c.client.Get(ctx, redisKey).Result()
 	if errors.Is(err, redis.Nil) {
 		return nil, 0, "", false, nil
@@ -51,8 +51,8 @@ func (c *redisCache) GetCachedSearch(ctx context.Context, tenantID, query string
 	return cached.Products, cached.Total, cached.SearchLogID, true, nil
 }
 
-func (c *redisCache) CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error {
-	redisKey := fmt.Sprintf("search:%s:%s:%d:%d", tenantID, query, page, pageSize)
+func (c *redisCache) CacheSearch(ctx context.Context, tenantID, query, lang string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error {
+	redisKey := fmt.Sprintf("search:%s:%s:%s:%d:%d", tenantID, query, lang, page, pageSize)
 	cached := struct {
 		Total       int                      `json:"total"`
 		Products    []map[string]interface{} `json:"products"`
@@ -175,5 +175,35 @@ func (c *redisCache) CacheSynonyms(ctx context.Context, tenantID string, synonym
 
 func (c *redisCache) DeleteSynonymsCache(ctx context.Context, tenantID string) error {
 	redisKey := fmt.Sprintf("tenant:%s:synonyms", tenantID)
+	return c.client.Del(ctx, redisKey).Err()
+}
+
+func (c *redisCache) GetCachedTranslations(ctx context.Context, tenantID string) (map[string][]string, bool, error) {
+	redisKey := fmt.Sprintf("tenant:%s:translations", tenantID)
+	val, err := c.client.Get(ctx, redisKey).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+
+	var translations map[string][]string
+	if err := json.Unmarshal([]byte(val), &translations); err != nil {
+		return nil, false, err
+	}
+	return translations, true, nil
+}
+
+func (c *redisCache) CacheTranslations(ctx context.Context, tenantID string, translations map[string][]string) error {
+	redisKey := fmt.Sprintf("tenant:%s:translations", tenantID)
+	val, err := json.Marshal(translations)
+	if err != nil {
+		return err
+	}
+	return c.client.Set(ctx, redisKey, string(val), 24*time.Hour).Err()
+}
+
+func (c *redisCache) DeleteTranslationsCache(ctx context.Context, tenantID string) error {
+	redisKey := fmt.Sprintf("tenant:%s:translations", tenantID)
 	return c.client.Del(ctx, redisKey).Err()
 }

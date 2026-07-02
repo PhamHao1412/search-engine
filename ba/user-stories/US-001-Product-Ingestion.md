@@ -62,7 +62,7 @@ Tôi muốn tạo hoặc cập nhật sản phẩm,
 
 1. Sản phẩm vẫn được lưu thành công vào Product Database.
 2. Ingestion Pipeline ghi nhận lỗi, lưu trạng thái tương ứng (`failed_translation` hoặc `failed_ai`) cùng thông điệp lỗi chi tiết vào bảng `search_sync_jobs`.
-3. Ingestion Pipeline vẫn tiếp tục thực hiện index sản phẩm lên OpenSearch bằng ngôn ngữ gốc và tag mặc định (`["sảnphẩm", "amaze"]`) để người dùng tìm thấy sản phẩm ngay lập tức.
+3. Ingestion Pipeline vẫn tiếp tục thực hiện index sản phẩm lên OpenSearch bằng ngôn ngữ gốc và tag mặc định (`["sảnphẩm", "swiftsearch"]`) để người dùng tìm thấy sản phẩm ngay lập tức.
 4. Một trình lập lịch cronjob tích hợp trong mã nguồn (CronJob Reprocessor) sẽ chạy định kỳ để tự động quét bảng `search_sync_jobs`, thực hiện dịch thuật/AI lại và cập nhật index OpenSearch (tối đa 5 lần thử).
 
 ### AF-02 - OpenSearch không khả dụng

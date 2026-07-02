@@ -1,8 +1,8 @@
-# Amaze Search Engine - Business Requirement Document
+# SwiftSearch Engine - Business Requirement Document
 
 ## 1. Project Overview
 
-Amaze Search Engine là hệ thống tìm kiếm sản phẩm dành cho nền tảng thương mại điện tử đa quốc gia.
+SwiftSearch Engine là hệ thống tìm kiếm sản phẩm dành cho nền tảng thương mại điện tử đa quốc gia.
 
 Mục tiêu chính:
 

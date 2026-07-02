@@ -6,9 +6,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/segmentio/kafka-go"
 	"search-service/internal/entity"
 	"search-service/internal/service"
+
+	"github.com/segmentio/kafka-go"
 )
 
 // ProductEventConsumer wraps Kafka reader, DLQ writer, and core SyncService to handle ingestion events

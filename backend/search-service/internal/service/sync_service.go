@@ -53,6 +53,8 @@ type SearchRepository interface {
 	GetAllTenants(ctx context.Context) ([]entity.Tenant, error)
 	DeleteSpellcheckRule(ctx context.Context, tenantID, id string) error
 	DeleteSearchSynonym(ctx context.Context, tenantID, id string) error
+	GetSearchTranslations(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error)
+	GetTopQueries(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error)
 }
 
 // ProductIndexer defines indexing operations for search indexing engine (OpenSearch)
@@ -60,14 +62,14 @@ type ProductIndexer interface {
 	IndexProduct(ctx context.Context, doc map[string]interface{}, productID string) error
 	UpdateProduct(ctx context.Context, doc map[string]interface{}, productID string) error
 	EnsureIndex(ctx context.Context)
-	SearchProducts(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error)
-	SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
+	SearchProducts(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error)
+	SuggestProducts(ctx context.Context, tenantID, query, lang string) ([]entity.Suggestion, error)
 }
 
 type ProductCache interface {
 	CacheProduct(ctx context.Context, tenantID, productID string, data map[string]interface{}) error
-	GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error)
-	CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
+	GetCachedSearch(ctx context.Context, tenantID, query, lang string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error)
+	CacheSearch(ctx context.Context, tenantID, query, lang string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
 	GetCachedSuggestions(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error)
 	CacheSuggestions(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error
 	GetCachedSpellcheck(ctx context.Context, tenantID, typoWord string) (string, bool, error)
@@ -77,6 +79,9 @@ type ProductCache interface {
 	GetCachedSynonyms(ctx context.Context, tenantID string) (map[string][]string, bool, error)
 	CacheSynonyms(ctx context.Context, tenantID string, synonyms map[string][]string) error
 	DeleteSynonymsCache(ctx context.Context, tenantID string) error
+	GetCachedTranslations(ctx context.Context, tenantID string) (map[string][]string, bool, error)
+	CacheTranslations(ctx context.Context, tenantID string, translations map[string][]string) error
+	DeleteTranslationsCache(ctx context.Context, tenantID string) error
 }
 
 // TranslationService defines translation operations
@@ -153,10 +158,6 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 	var syncStatus = "success"
 	var syncErrorMsg string
 
-	var nameEN, descEN, nameTH, descTH string
-	var tags []string
-	var searchTagsStr string
-
 	if !textChanged && job.Status == "success" {
 		log.Printf("[SyncProduct] Text hash unchanged for product %s. Skipping translation/AI calls and performing partial OpenSearch update.\n", product.ID)
 
@@ -193,81 +194,70 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 	// Full indexing flow:
 	job.TextHash = currentHash
 
-	// 1. Translate to EN and TH
-	if product.OriginalLanguage == "vi" {
-		nameEN, err = s.translator.Translate(ctx, product.Name, "en")
-		if err != nil {
-			log.Printf("Translate EN failed: %v", err)
-			syncStatus = "failed_translation"
-			syncErrorMsg = fmt.Sprintf("Translate EN failed: %v", err)
-			nameEN = product.Name
-		} else {
-			descEN, _ = s.translator.Translate(ctx, product.Description, "en")
-		}
+	// Translate dynamically based on original language
+	langs := []string{"vi", "en", "th"}
+	translatedNames := map[string]string{"vi": product.Name, "en": product.Name, "th": product.Name}
+	translatedDescs := map[string]string{"vi": product.Description, "en": product.Description, "th": product.Description}
 
-		nameTH, err = s.translator.Translate(ctx, product.Name, "th")
-		if err != nil {
-			log.Printf("Translate TH failed: %v", err)
-			if syncErrorMsg == "" {
+	origLang := product.OriginalLanguage
+	if origLang == "" {
+		origLang = "vi"
+	}
+
+	for _, lang := range langs {
+		if lang != origLang {
+			// Translate name
+			nameTrans, err := s.translator.Translate(ctx, product.Name, lang)
+			if err != nil {
+				log.Printf("Translate Name from %s to %s failed: %v", origLang, lang, err)
 				syncStatus = "failed_translation"
-				syncErrorMsg = fmt.Sprintf("Translate TH failed: %v", err)
+				syncErrorMsg = fmt.Sprintf("Translate Name to %s failed: %v", lang, err)
+				translatedNames[lang] = product.Name
+			} else {
+				translatedNames[lang] = nameTrans
 			}
-			nameTH = product.Name
-		} else {
-			descTH, _ = s.translator.Translate(ctx, product.Description, "th")
+
+			// Translate description
+			descTrans, err := s.translator.Translate(ctx, product.Description, lang)
+			if err != nil {
+				log.Printf("Translate Desc from %s to %s failed: %v", origLang, lang, err)
+				translatedDescs[lang] = product.Description
+			} else {
+				translatedDescs[lang] = descTrans
+			}
 		}
-	} else {
-		nameEN = product.Name
-		descEN = product.Description
-		nameTH = product.Name
-		descTH = product.Description
 	}
 
-	// 2. Generate search tags via AI
-	tags, err = s.tagGenerator.GenerateSearchTags(ctx, product.Name, product.Description)
-	if err != nil {
-		log.Printf("AI GenerateSearchTags failed: %v", err)
-		if syncStatus == "success" {
-			syncStatus = "failed_ai"
-			syncErrorMsg = fmt.Sprintf("AI Gen tags failed: %v", err)
+	nameVI := translatedNames["vi"]
+	descVI := translatedDescs["vi"]
+	nameEN := translatedNames["en"]
+	descEN := translatedDescs["en"]
+	nameTH := translatedNames["th"]
+	descTH := translatedDescs["th"]
+
+	// Save non-original translations to PostgreSQL
+	for _, lang := range langs {
+		if lang != origLang {
+			translation := &entity.ProductTranslation{
+				ID:                    s.newUUID(),
+				TenantID:              product.TenantID,
+				ProductID:             product.ID,
+				LanguageCode:          lang,
+				NameTranslated:        translatedNames[lang],
+				DescriptionTranslated: translatedDescs[lang],
+				CreatedAt:             time.Now(),
+				UpdatedAt:             time.Now(),
+			}
+			if err := s.repo.SaveTranslation(ctx, translation); err != nil {
+				log.Printf("Failed to save %s translation: %v", lang, err)
+			}
 		}
-		tags = []string{"sảnphẩm", "amaze"}
-	}
-	searchTagsStr = strings.Join(tags, " ")
-
-	// 3. Save translations to Postgres (schema product_svc)
-	translationEN := &entity.ProductTranslation{
-		ID:                    s.newUUID(),
-		TenantID:              product.TenantID,
-		ProductID:             product.ID,
-		LanguageCode:          "en",
-		NameTranslated:        nameEN,
-		DescriptionTranslated: descEN,
-		CreatedAt:             time.Now(),
-		UpdatedAt:             time.Now(),
-	}
-	if err := s.repo.SaveTranslation(ctx, translationEN); err != nil {
-		log.Printf("Failed to save EN translation: %v", err)
 	}
 
-	translationTH := &entity.ProductTranslation{
-		ID:                    s.newUUID(),
-		TenantID:              product.TenantID,
-		ProductID:             product.ID,
-		LanguageCode:          "th",
-		NameTranslated:        nameTH,
-		DescriptionTranslated: descTH,
-		CreatedAt:             time.Now(),
-		UpdatedAt:             time.Now(),
-	}
-	if err := s.repo.SaveTranslation(ctx, translationTH); err != nil {
-		log.Printf("Failed to save TH translation: %v", err)
-	}
-
-	// 4. Index OpenSearch
+	// Index document in OpenSearch
 	var suggestNames []string
 	suggestSeen := make(map[string]bool)
-	for _, n := range []string{product.Name, nameEN, nameTH} {
+	for _, n := range []string{nameVI, nameEN, nameTH} {
 		n = strings.TrimSpace(n)
 		if n != "" && !suggestSeen[n] {
 			suggestSeen[n] = true
@@ -285,10 +275,10 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 		"id":              product.ID,
 		"tenant_id":       product.TenantID,
 		"category_id":     categoryID,
-		"product_name_vi": product.Name,
+		"product_name_vi": nameVI,
 		"product_name_en": nameEN,
 		"product_name_th": nameTH,
-		"description_vi":  product.Description,
+		"description_vi":  descVI,
 		"description_en":  descEN,
 		"description_th":  descTH,
 		"brand":           product.Brand,
@@ -297,7 +287,6 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 		"inventory":       product.Inventory,
 		"featured":        product.Featured,
 		"status":          product.Status,
-		"search_tags":     searchTagsStr,
 		"suggest":         suggestText,
 	}
 
@@ -308,15 +297,15 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 		syncErrorMsg = fmt.Sprintf("OpenSearch index failed: %v", opensearchErr)
 	}
 
-	// 5. Cache in Redis
+	// Save document cache in Redis
 	cacheData := map[string]interface{}{
 		"product": product,
 		"translations": []map[string]string{
+			{"lang": "vi", "name": nameVI, "description": descVI},
 			{"lang": "en", "name": nameEN, "description": descEN},
 			{"lang": "th", "name": nameTH, "description": descTH},
 		},
-		"search_tags": tags,
-		"cached_at":   time.Now().Format(time.RFC3339),
+		"cached_at": time.Now().Format(time.RFC3339),
 	}
 	if err := s.cache.CacheProduct(ctx, product.TenantID, product.ID, cacheData); err != nil {
 		log.Printf("Failed to cache in Redis: %v", err)

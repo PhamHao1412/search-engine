@@ -8,7 +8,7 @@ SEARCH_MIGRATIONS_DIR=backend/search-service/scripts/migrations
 	run-product run-search-api run-search-worker test-product test-search test clean
 
 help:
-	@echo "Các lệnh khả dụng trong dự án Amaze Search Engine (Decoupled Architecture):"
+	@echo "Các lệnh khả dụng trong dự án SwiftSearch Engine (Decoupled Architecture):"
 	@echo "  make docker-up             - Khởi chạy các containers hạ tầng (Redis, OpenSearch, Kafka, Kafka UI)"
 	@echo "  make docker-down           - Dừng các containers"
 	@echo "  make docker-clean          - Dừng các containers và xóa dữ liệu volumes"

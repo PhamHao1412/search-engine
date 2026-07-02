@@ -1,6 +1,6 @@
 # Quy tắc lập trình cho AI Agent (Agent Rules & Guidelines)
 
-Tài liệu này định nghĩa các quy tắc thiết kế, phát triển và lập trình bắt buộc đối với mọi AI Agent khi làm việc trên dự án **Amaze Search Engine**.
+Tài liệu này định nghĩa các quy tắc thiết kế, phát triển và lập trình bắt buộc đối với mọi AI Agent khi làm việc trên dự án **SwiftSearch Engine**.
 
 ---
 

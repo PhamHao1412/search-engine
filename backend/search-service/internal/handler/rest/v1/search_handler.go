@@ -54,7 +54,16 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		pageSize = 20
 	}
 
-	products, total, searchLogID, spellcheckCorrected, autoCorrected, err := h.searchSvc.Search(c.Request.Context(), tenantID, query, page, pageSize)
+	langHeader := c.GetHeader("X-Language-Key")
+	lang := strings.ToLower(strings.TrimSpace(langHeader))
+	if lang == "vn" {
+		lang = "vi"
+	}
+	if lang != "vi" && lang != "en" && lang != "th" {
+		lang = "vi"
+	}
+
+	products, total, searchLogID, spellcheckCorrected, autoCorrected, err := h.searchSvc.Search(c.Request.Context(), tenantID, query, lang, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Search Service Unavailable: %v", err)})
 		return
@@ -104,8 +113,23 @@ func (h *SearchHandler) Suggest(c *gin.Context) {
 		return
 	}
 
+	langHeader := c.GetHeader("X-Language-Key")
+	if langHeader == "" {
+		langHeader = c.GetHeader("X-Lang-ID")
+	}
+	if langHeader == "" {
+		langHeader = c.GetHeader("x-lang-id")
+	}
+	lang := strings.ToLower(strings.TrimSpace(langHeader))
+	if lang == "vn" {
+		lang = "vi"
+	}
+	if lang != "vi" && lang != "en" && lang != "th" {
+		lang = "vi"
+	}
+
 	query := c.Query("q")
-	suggestions, err := h.searchSvc.Suggest(c.Request.Context(), tenantID, query)
+	suggestions, err := h.searchSvc.Suggest(c.Request.Context(), tenantID, query, lang)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get suggestions: %v", err)})
 		return
@@ -173,4 +197,44 @@ func (h *SearchHandler) GetProductByID(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, product)
+}
+
+// Fetch dynamic search suggestions based on top search logs
+func (h *SearchHandler) GetHotKeywords(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "5")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 5
+	}
+
+	langHeader := c.GetHeader("X-Language-Key")
+	if langHeader == "" {
+		langHeader = c.GetHeader("X-Lang-ID")
+	}
+	if langHeader == "" {
+		langHeader = c.GetHeader("x-lang-id")
+	}
+	lang := strings.ToLower(strings.TrimSpace(langHeader))
+	if lang == "vn" {
+		lang = "vi"
+	}
+	if lang != "vi" && lang != "en" && lang != "th" {
+		lang = "vi"
+	}
+
+	keywords, err := h.searchSvc.GetHotKeywords(c.Request.Context(), tenantID, lang, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get hot keywords: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"keywords": keywords,
+	})
 }

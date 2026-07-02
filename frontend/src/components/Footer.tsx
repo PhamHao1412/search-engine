@@ -7,10 +7,10 @@ const Footer: React.FC = () => {
       <div className="footer-content">
         <div className="footer-brand">
           <ShoppingBag className="text-gradient" size={20} strokeWidth={2.5} />
-          <span>Amaze<span style={{ color: 'var(--primary)' }}>Search</span></span>
+          <span>Swift<span style={{ color: 'var(--primary)' }}>Search</span></span>
         </div>
         <p className="footer-text">
-          © {new Date().getFullYear()} AmazeSearch. Hệ thống tìm kiếm sản phẩm đa ngôn ngữ thời gian thực tối ưu bằng OpenSearch & AI.
+          © {new Date().getFullYear()} SwiftSearch. Hệ thống tìm kiếm sản phẩm đa ngôn ngữ thời gian thực tối ưu bằng OpenSearch & AI.
         </p>
         <div className="footer-links">
           <a href="#" className="footer-link">Tài liệu API</a>

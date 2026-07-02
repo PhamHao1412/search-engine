@@ -14,7 +14,14 @@ const ProductDetail: React.FC = () => {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeLang, setActiveLang] = useState<'vi' | 'en' | 'th'>('vi');
+  const [activeLang, setActiveLang] = useState<'vi' | 'en' | 'th'>(
+    (localStorage.getItem('swiftsearch_search_lang') as 'vi' | 'en' | 'th') || 'vi'
+  );
+
+  const handleLangChange = (lang: 'vi' | 'en' | 'th') => {
+    setActiveLang(lang);
+    localStorage.setItem('swiftsearch_search_lang', lang);
+  };
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -50,7 +57,7 @@ const ProductDetail: React.FC = () => {
         <header className="header">
           <div className="header-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
             <ShoppingBag className="text-gradient" size={26} strokeWidth={2.5} />
-            <span>Amaze<span style={{ color: 'var(--primary)' }}>Search</span></span>
+            <span>Swift<span style={{ color: 'var(--primary)' }}>Search</span></span>
           </div>
         </header>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -68,7 +75,7 @@ const ProductDetail: React.FC = () => {
         <header className="header">
           <div className="header-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
             <ShoppingBag className="text-gradient" size={26} strokeWidth={2.5} />
-            <span>Amaze<span style={{ color: 'var(--primary)' }}>Search</span></span>
+            <span>Swift<span style={{ color: 'var(--primary)' }}>Search</span></span>
           </div>
         </header>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
@@ -96,7 +103,7 @@ const ProductDetail: React.FC = () => {
       <header className="header" style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: '#ffffff' }}>
         <div className="header-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <ShoppingBag className="text-gradient" size={26} strokeWidth={2.5} />
-          <span>Amaze<span style={{ color: 'var(--primary)' }}>Search</span></span>
+          <span>Swift<span style={{ color: 'var(--primary)' }}>Search</span></span>
         </div>
 
         <div className="header-actions">
@@ -104,7 +111,7 @@ const ProductDetail: React.FC = () => {
           <div className="lang-selector" style={{ display: 'flex', gap: '12px' }}>
             <span 
               className={`lang-flag ${activeLang === 'vi' ? 'active' : ''}`}
-              onClick={() => setActiveLang('vi')}
+              onClick={() => handleLangChange('vi')}
               title="Tiếng Việt (Gốc)"
               style={{ fontSize: '1.35rem', cursor: 'pointer', opacity: activeLang === 'vi' ? 1 : 0.4 }}
             >
@@ -112,7 +119,7 @@ const ProductDetail: React.FC = () => {
             </span>
             <span 
               className={`lang-flag ${activeLang === 'en' ? 'active' : ''}`}
-              onClick={() => setActiveLang('en')}
+              onClick={() => handleLangChange('en')}
               title="Tiếng Anh (Dịch)"
               style={{ fontSize: '1.35rem', cursor: 'pointer', opacity: activeLang === 'en' ? 1 : 0.4 }}
             >
@@ -120,7 +127,7 @@ const ProductDetail: React.FC = () => {
             </span>
             <span 
               className={`lang-flag ${activeLang === 'th' ? 'active' : ''}`}
-              onClick={() => setActiveLang('th')}
+              onClick={() => handleLangChange('th')}
               title="Tiếng Thái (Dịch)"
               style={{ fontSize: '1.35rem', cursor: 'pointer', opacity: activeLang === 'th' ? 1 : 0.4 }}
             >
@@ -214,7 +221,7 @@ const ProductDetail: React.FC = () => {
             }}>
               <Layers size={64} style={{ color: 'rgba(37, 99, 235, 0.08)', marginBottom: '12px' }} />
               <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                {product.brand || 'Amaze'}
+                {product.brand || 'SwiftSearch'}
               </span>
             </div>
           </div>
@@ -238,7 +245,7 @@ const ProductDetail: React.FC = () => {
                 padding: '4px 10px',
                 borderRadius: '6px'
               }}>
-                {product.brand || 'Amaze'}
+                {product.brand || 'SwiftSearch'}
               </span>
               <span style={{
                 fontSize: '0.85rem',

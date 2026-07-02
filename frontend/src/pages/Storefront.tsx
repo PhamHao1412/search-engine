@@ -18,22 +18,7 @@ import { searchApi, getSearchDebugInfo } from '../services/api';
 import { Product, SearchDebugInfo, Suggestion } from '../types';
 import Footer from '../components/Footer';
 
-const HOT_SUGGESTIONS: Record<string, string[]> = {
-  'd3b07384-d113-4956-a5db-251d50c18d01': [
-    'Bàn phím cơ Akko',
-    'Chuột Logitech G Pro',
-    'Bàn phím Ajazz',
-    'Chuột không dây',
-    'Keycap'
-  ],
-  'a1a2a3a4-b1b2-c1c2-d1d2-e1e2e3e4e5e6': [
-    'Son dưỡng môi',
-    'Son môi đỏ',
-    'Mỹ phẩm dưỡng da',
-    'Lip balm',
-    'Kem chống nắng'
-  ],
-};
+// Dynamic hot keywords are loaded from search logs API
 
 const Storefront: React.FC = () => {
   const navigate = useNavigate();
@@ -68,7 +53,25 @@ const Storefront: React.FC = () => {
   const [availableBrands, setAvailableBrands] = useState<string[]>([]);
 
   // Visual/UX States
-  const [activeLang, setActiveLang] = useState<'vi' | 'en' | 'th'>('vi');
+  const [activeLang, setActiveLang] = useState<'vi' | 'en' | 'th'>(
+    (localStorage.getItem('swiftsearch_search_lang') as 'vi' | 'en' | 'th') || 'vi'
+  );
+
+  const handleLangChange = (lang: 'vi' | 'en' | 'th') => {
+    setActiveLang(lang);
+    localStorage.setItem('swiftsearch_search_lang', lang);
+  };
+
+  const [hotKeywords, setHotKeywords] = useState<string[]>([]);
+
+  // Load real-time hot keywords
+  useEffect(() => {
+    const loadHotKeywords = async () => {
+      const keywords = await searchApi.getHotKeywords(activeTenant.id);
+      setHotKeywords(keywords);
+    };
+    loadHotKeywords();
+  }, [activeTenant.id, activeLang]);
   const [selectedProduct, setSelectedProduct] = useState<{ product: Product; index: number } | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [debugInfo, setDebugInfo] = useState<SearchDebugInfo | null>(null);
@@ -85,10 +88,10 @@ const Storefront: React.FC = () => {
     setPage(1);
   }, [urlQuery]);
 
-  // Trigger search when query parameter, page, or tenant changes
+  // Trigger search when query parameter, page, tenant, or active language changes
   useEffect(() => {
     handleSearch(urlQuery, page);
-  }, [urlQuery, page, activeTenant.id]);
+  }, [urlQuery, page, activeTenant.id, activeLang]);
 
   // Debounce API call for autocomplete suggestions
   useEffect(() => {
@@ -174,7 +177,7 @@ const Storefront: React.FC = () => {
 
     try {
       const cleanTerm = searchTerm.trim();
-      const res = await searchApi.searchProducts(cleanTerm, targetPage, 20, activeTenant.id);
+      const res = await searchApi.searchProducts(cleanTerm, targetPage, 20, activeTenant.id, activeLang);
       
       const endTime = performance.now();
       const searchTimeMs = Math.round(endTime - startTime);
@@ -302,7 +305,7 @@ const Storefront: React.FC = () => {
       <header className="header">
         <div className="header-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <ShoppingBag className="text-gradient" size={26} strokeWidth={2.5} />
-          <span>Amaze<span style={{ color: 'var(--primary)' }}>Search</span></span>
+          <span>Swift<span style={{ color: 'var(--primary)' }}>Search</span></span>
         </div>
 
         <div className="header-actions">
@@ -310,21 +313,21 @@ const Storefront: React.FC = () => {
           <div className="lang-selector">
             <span 
               className={`lang-flag ${activeLang === 'vi' ? 'active' : ''}`}
-              onClick={() => setActiveLang('vi')}
+              onClick={() => handleLangChange('vi')}
               title="Tiếng Việt (Gốc)"
             >
               🇻🇳
             </span>
             <span 
               className={`lang-flag ${activeLang === 'en' ? 'active' : ''}`}
-              onClick={() => setActiveLang('en')}
+              onClick={() => handleLangChange('en')}
               title="Tiếng Anh (Dịch)"
             >
               🇺🇸
             </span>
             <span 
               className={`lang-flag ${activeLang === 'th' ? 'active' : ''}`}
-              onClick={() => setActiveLang('th')}
+              onClick={() => handleLangChange('th')}
               title="Tiếng Thái (Dịch)"
             >
               🇹🇭
@@ -382,7 +385,6 @@ const Storefront: React.FC = () => {
               }}>
                 {suggestions.map((suggestion, index) => {
                   const isOutOfStock = suggestion.inventory <= 0;
-                  const translatedSubtitle = suggestion.product_name_en || '';
 
                   return (
                     <div
@@ -429,10 +431,21 @@ const Storefront: React.FC = () => {
                       {/* Middle: Product info */}
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                         <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {suggestion.product_name_vi}
+                          {activeLang === 'en' && suggestion.product_name_en 
+                            ? suggestion.product_name_en 
+                            : activeLang === 'th' && suggestion.product_name_th 
+                              ? suggestion.product_name_th 
+                              : suggestion.product_name_vi}
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {suggestion.brand || 'Chưa phân loại'} {translatedSubtitle ? `• ${translatedSubtitle}` : ''}
+                          {suggestion.brand || 'Chưa phân loại'} {(() => {
+                            const desc = activeLang === 'en' && suggestion.description_en 
+                              ? suggestion.description_en 
+                              : activeLang === 'th' && suggestion.description_th 
+                                ? suggestion.description_th 
+                                : suggestion.description_vi;
+                            return desc ? `• ${desc}` : '';
+                          })()}
                         </span>
                       </div>
 
@@ -457,7 +470,7 @@ const Storefront: React.FC = () => {
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500, marginRight: '4px' }}>
               <Sparkles size={14} style={{ color: 'var(--warning)' }} /> Từ khóa hot:
             </span>
-            {HOT_SUGGESTIONS[activeTenant.id]?.map((suggest) => (
+            {hotKeywords.map((suggest) => (
               <button
                 key={suggest}
                 onClick={() => handleHotSuggestionClick(suggest)}
@@ -644,14 +657,14 @@ const Storefront: React.FC = () => {
                   const rating = getMockRating(product.id);
                   const isOutOfStock = product.inventory <= 0;
 
-                  // Selection of subtitle based on language switcher
-                  let translatedSubtitle = '';
-                  if (activeLang === 'en' && product.product_name_en) {
-                    translatedSubtitle = product.product_name_en;
-                  } else if (activeLang === 'th' && product.product_name_th) {
-                    translatedSubtitle = product.product_name_th;
+                  // Selection of description based on language switcher
+                  let translatedDesc = '';
+                  if (activeLang === 'en' && product.description_en) {
+                    translatedDesc = product.description_en;
+                  } else if (activeLang === 'th' && product.description_th) {
+                    translatedDesc = product.description_th;
                   } else {
-                    translatedSubtitle = product.product_name_en || product.product_name_th || 'Dịch thuật đang cập nhật...';
+                    translatedDesc = product.description_vi || '';
                   }
 
                   return (
@@ -667,7 +680,7 @@ const Storefront: React.FC = () => {
                         {product.image_url ? (
                           <img
                             src={product.image_url}
-                            alt={product.product_name_vi}
+                            alt={activeLang === 'en' && product.product_name_en ? product.product_name_en : activeLang === 'th' && product.product_name_th ? product.product_name_th : product.product_name_vi}
                             className="product-img"
                             onError={(e) => {
                               // If loading image fails, show default placeholder
@@ -679,16 +692,22 @@ const Storefront: React.FC = () => {
                         {/* Default visual mockup placeholder for products */}
                         <div className="product-img-placeholder">
                           <Layers size={36} style={{ color: 'rgba(37, 99, 235, 0.15)' }} />
-                          <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{product.brand || 'Amaze'}</span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{product.brand || 'SwiftSearch'}</span>
                         </div>
                       </div>
 
                       {/* Product Card Body */}
                       <div className="product-card-body">
                         <span className="product-brand">{product.brand || 'Chưa phân loại'}</span>
-                        <h3 className="product-name-vi">{product.product_name_vi}</h3>
-                        <p className="product-name-translated" title={translatedSubtitle}>
-                          {translatedSubtitle}
+                        <h3 className="product-name-vi">
+                          {activeLang === 'en' && product.product_name_en 
+                            ? product.product_name_en 
+                            : activeLang === 'th' && product.product_name_th 
+                              ? product.product_name_th 
+                              : product.product_name_vi}
+                        </h3>
+                        <p className="product-name-translated" title={translatedDesc}>
+                          {translatedDesc}
                         </p>
 
                         <div className="rating-stars" style={{ marginBottom: '12px' }}>
@@ -880,13 +899,13 @@ const Storefront: React.FC = () => {
                 {selectedProduct.product.image_url ? (
                   <img
                     src={selectedProduct.product.image_url}
-                    alt={selectedProduct.product.product_name_vi}
+                    alt={activeLang === 'en' && selectedProduct.product.product_name_en ? selectedProduct.product.product_name_en : activeLang === 'th' && selectedProduct.product.product_name_th ? selectedProduct.product.product_name_th : selectedProduct.product.product_name_vi}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
                     <Layers size={52} style={{ color: 'rgba(37, 99, 235, 0.15)' }} />
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedProduct.product.brand || 'Amaze'}</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedProduct.product.brand || 'SwiftSearch'}</span>
                   </div>
                 )}
               </div>
@@ -894,7 +913,13 @@ const Storefront: React.FC = () => {
               {/* Details Column */}
               <div className="modal-details-panel">
                 <div className="modal-product-brand">{selectedProduct.product.brand || 'Unbranded'}</div>
-                <h2 className="modal-product-name">{selectedProduct.product.product_name_vi}</h2>
+                <h2 className="modal-product-name">
+                  {activeLang === 'en' && selectedProduct.product.product_name_en 
+                    ? selectedProduct.product.product_name_en 
+                    : activeLang === 'th' && selectedProduct.product.product_name_th 
+                      ? selectedProduct.product.product_name_th 
+                      : selectedProduct.product.product_name_vi}
+                </h2>
 
                 {/* Multilingual Names Display */}
                 <div className="modal-product-translations">
@@ -924,11 +949,15 @@ const Storefront: React.FC = () => {
                 <div style={{ marginTop: '24px', fontSize: '0.85rem', borderTop: '1px solid var(--border-color)', paddingTop: '16px', color: 'var(--text-secondary)' }}>
                   <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Mô tả sản phẩm:</div>
                   <p style={{ lineHeight: '1.4', fontStyle: 'normal' }}>
-                    {selectedProduct.product.description_vi || 'Sản phẩm chưa cập nhật mô tả chi tiết bằng tiếng Việt.'}
+                    {activeLang === 'en' && selectedProduct.product.description_en 
+                      ? selectedProduct.product.description_en 
+                      : activeLang === 'th' && selectedProduct.product.description_th 
+                        ? selectedProduct.product.description_th 
+                        : selectedProduct.product.description_vi || 'Sản phẩm chưa cập nhật mô tả chi tiết.'}
                   </p>
-                  {selectedProduct.product.description_en && (
+                  {activeLang !== 'vi' && selectedProduct.product.description_vi && (
                     <p style={{ lineHeight: '1.4', fontStyle: 'italic', marginTop: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      En description: {selectedProduct.product.description_en}
+                      Bản gốc (VI): {selectedProduct.product.description_vi}
                     </p>
                   )}
                 </div>

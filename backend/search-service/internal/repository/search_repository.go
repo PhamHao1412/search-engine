@@ -317,3 +317,23 @@ func (r *searchRepository) DeleteSearchSynonym(ctx context.Context, tenantID, id
 		Where("tenant_id = ? AND id = ?", tenantID, id).
 		Delete(&entity.SearchSynonym{}).Error
 }
+
+func (r *searchRepository) GetSearchTranslations(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error) {
+	var list []entity.SearchTranslation
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND status = 'active'", tenantID).
+		Find(&list).Error
+	return list, err
+}
+
+func (r *searchRepository) GetTopQueries(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error) {
+	var list []entity.SearchLog
+	err := r.db.WithContext(ctx).Table("search_svc.search_logs").
+		Select("query, normalized_query, COUNT(*) as result_count").
+		Where("tenant_id = ? AND result_count > 0", tenantID).
+		Group("query, normalized_query").
+		Order("result_count DESC").
+		Limit(limit).
+		Find(&list).Error
+	return list, err
+}

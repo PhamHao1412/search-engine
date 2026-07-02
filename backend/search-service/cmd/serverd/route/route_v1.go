@@ -10,6 +10,7 @@ func V1Router(r *gin.Engine, searchHandler *v1.SearchHandler, adminHandler *v1.A
 	apiV1 := r.Group("/api/v1")
 
 	apiV1.GET("/search", searchHandler.Search)
+	apiV1.GET("/search/hot-keywords", searchHandler.GetHotKeywords)
 	apiV1.POST("/search/sync", searchHandler.SyncAll)
 	apiV1.POST("/analytics/click", searchHandler.TrackClick)
 	apiV1.GET("/suggest", searchHandler.Suggest)

@@ -36,7 +36,7 @@ func LoadConfig() (*Config, error) {
 		DBPort:                getEnv("DB_PORT", "5432"),
 		DBUser:                getEnv("DB_USER", "postgres"),
 		DBPassword:            getEnv("DB_PASSWORD", "postgrespassword"),
-		DBName:                getEnv("DB_NAME", "amaze_search"),
+		DBName:                getEnv("DB_NAME", "swiftsearch_search"),
 		DBSchema:              getEnv("DB_SCHEMA", "search"),
 		DBSSLMode:             getEnv("DB_SSLMODE", "disable"),
 		RedisHost:             getEnv("REDIS_HOST", "localhost"),

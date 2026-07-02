@@ -62,6 +62,9 @@ export interface Suggestion {
   product_name_vi: string;
   product_name_en?: string;
   product_name_th?: string;
+  description_vi?: string;
+  description_en?: string;
+  description_th?: string;
   image_url?: string;
   inventory: number;
 }

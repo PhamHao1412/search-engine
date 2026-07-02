@@ -11,10 +11,11 @@ import (
 )
 
 type SearchService interface {
-	Search(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, string, bool, error)
+	Search(ctx context.Context, tenantID, query, lang string, page, pageSize int) ([]map[string]interface{}, int, string, string, bool, error)
 	TrackClick(ctx context.Context, tenantID, searchLogID, productID, query string, position int) error
-	Suggest(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
+	Suggest(ctx context.Context, tenantID, query, lang string) ([]entity.Suggestion, error)
 	GetProductByID(ctx context.Context, tenantID, productID string) (*entity.Product, error)
+	GetHotKeywords(ctx context.Context, tenantID string, lang string, limit int) ([]string, error)
 }
 
 type AnalyticsRepository interface {
@@ -38,7 +39,7 @@ func NewSearchService(indexer ProductIndexer, cache ProductCache, analytics Anal
 	}
 }
 
-func (s *searchService) Search(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, string, bool, error) {
+func (s *searchService) Search(ctx context.Context, tenantID, query, lang string, page, pageSize int) ([]map[string]interface{}, int, string, string, bool, error) {
 	// Generate search_log_id (UUID)
 	searchLogID := s.newUUID()
 
@@ -59,7 +60,7 @@ func (s *searchService) Search(ctx context.Context, tenantID, query string, page
 	}
 
 	// Check cache for search results
-	cachedData, total, cachedSearchLogID, found, err := s.cache.GetCachedSearch(ctx, tenantID, searchQuery, page, pageSize)
+	cachedData, total, cachedSearchLogID, found, err := s.cache.GetCachedSearch(ctx, tenantID, searchQuery, lang, page, pageSize)
 	if err == nil && found {
 		// Cache Hit: No DB write, return cached search log ID directly
 		return cachedData, total, cachedSearchLogID, spellcheckCorrected, autoCorrected, nil
@@ -81,12 +82,23 @@ func (s *searchService) Search(ctx context.Context, tenantID, query string, page
 		log.Printf("Warning: Failed to load synonyms for tenant %s: %v", tenantID, synErr)
 	}
 
+	// Load translations for current tenant
+	translations, transErr := s.loadTranslations(ctx, tenantID)
+	if transErr != nil {
+		log.Printf("Warning: Failed to load translations for tenant %s: %v", tenantID, transErr)
+	}
+
+	// Merge translations into synonyms map for seamless Query Expansion
+	for k, v := range translations {
+		synonyms[k] = append(synonyms[k], v...)
+	}
+
 	// Expand search query with synonyms
 	synonymSegments := s.ExpandQuery(searchQuery, synonyms)
-	log.Printf("[DEBUG Search] tenantID: %s, searchQuery: %q, loaded synonyms count: %d, synonymSegments: %+v",
+	log.Printf("[DEBUG Search] tenantID: %s, searchQuery: %q, loaded synonyms/translations count: %d, synonymSegments: %+v",
 		tenantID, searchQuery, len(synonyms), synonymSegments)
 
-	products, total, opensearchSuggest, err := s.indexer.SearchProducts(ctx, tenantID, searchQuery, synonymSegments, from, size)
+	products, total, opensearchSuggest, err := s.indexer.SearchProducts(ctx, tenantID, searchQuery, synonymSegments, lang, from, size)
 	if err != nil {
 		return nil, 0, "", "", false, err
 	}
@@ -98,7 +110,7 @@ func (s *searchService) Search(ctx context.Context, tenantID, query string, page
 	}
 
 	// Cache search results
-	if cacheErr := s.cache.CacheSearch(ctx, tenantID, searchQuery, page, pageSize, products, total, searchLogID); cacheErr != nil {
+	if cacheErr := s.cache.CacheSearch(ctx, tenantID, searchQuery, lang, page, pageSize, products, total, searchLogID); cacheErr != nil {
 		log.Printf("Warning: Failed to save search results to cache: %v", cacheErr)
 	}
 
@@ -121,7 +133,7 @@ func (s *searchService) TrackClick(ctx context.Context, tenantID, searchLogID, p
 	return s.analytics.SaveClickLog(ctx, searchLogID, tenantID, query, productID, position)
 }
 
-func (s *searchService) Suggest(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
+func (s *searchService) Suggest(ctx context.Context, tenantID, query, lang string) ([]entity.Suggestion, error) {
 	normalized := strings.ToLower(strings.TrimSpace(query))
 	if len(normalized) < 2 {
 		return []entity.Suggestion{}, nil
@@ -134,7 +146,16 @@ func (s *searchService) Suggest(ctx context.Context, tenantID, query string) ([]
 		suggestQuery = corrected
 	}
 
-	cached, found, err := s.cache.GetCachedSuggestions(ctx, tenantID, suggestQuery)
+	// Load translations for current tenant to expand query if exactly matches
+	translations, transErr := s.loadTranslations(ctx, tenantID)
+	if transErr == nil {
+		if translatedVals, exists := translations[suggestQuery]; exists && len(translatedVals) > 0 {
+			suggestQuery = translatedVals[0]
+		}
+	}
+
+	cacheKey := suggestQuery + ":" + lang
+	cached, found, err := s.cache.GetCachedSuggestions(ctx, tenantID, cacheKey)
 	if err == nil && found {
 		return cached, nil
 	}
@@ -142,13 +163,13 @@ func (s *searchService) Suggest(ctx context.Context, tenantID, query string) ([]
 		log.Printf("failed to get cached suggestions: %v", err)
 	}
 
-	suggestions, err := s.indexer.SuggestProducts(ctx, tenantID, suggestQuery)
+	suggestions, err := s.indexer.SuggestProducts(ctx, tenantID, suggestQuery, lang)
 	if err != nil {
 		log.Printf("failed to get suggestions from indexer: %v", err)
 		return []entity.Suggestion{}, nil
 	}
 
-	if err := s.cache.CacheSuggestions(ctx, tenantID, suggestQuery, suggestions); err != nil {
+	if err := s.cache.CacheSuggestions(ctx, tenantID, cacheKey, suggestions); err != nil {
 		log.Printf("failed to cache suggestions: %v", err)
 	}
 
@@ -282,6 +303,40 @@ func (s *searchService) loadSynonyms(ctx context.Context, tenantID string) (map[
 	return synonyms, nil
 }
 
+func (s *searchService) loadTranslations(ctx context.Context, tenantID string) (map[string][]string, error) {
+	if s.repo == nil {
+		return make(map[string][]string), nil
+	}
+
+	if s.cache != nil {
+		cached, found, err := s.cache.GetCachedTranslations(ctx, tenantID)
+		if err == nil && found {
+			return cached, nil
+		}
+	}
+
+	// Retrieve from Postgres
+	dbRules, err := s.repo.GetSearchTranslations(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	translations := make(map[string][]string)
+	for _, rule := range dbRules {
+		key := removeDiacritics(strings.ToLower(strings.TrimSpace(rule.Keyword)))
+		val := strings.ToLower(strings.TrimSpace(rule.Translation))
+		if key != "" && val != "" {
+			translations[key] = append(translations[key], val)
+		}
+	}
+
+	if s.cache != nil {
+		_ = s.cache.CacheTranslations(ctx, tenantID, translations)
+	}
+
+	return translations, nil
+}
+
 func (s *searchService) ExpandQuery(query string, synonyms map[string][]string) [][]string {
 	words := strings.Fields(query)
 	n := len(words)
@@ -358,4 +413,117 @@ func removeDiacritics(s string) string {
 		"ỳ", "y", "ý", "y", "ỷ", "y", "ỹ", "y", "ỵ", "y",
 	)
 	return replacer.Replace(s)
+}
+
+// Normalize raw query text against actual product title
+func normalizeQueryWithProduct(query string, productTitle string) string {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return ""
+	}
+	productTitle = strings.TrimSpace(productTitle)
+	if productTitle == "" {
+		return ""
+	}
+
+	queryWords := strings.Fields(query)
+	productWords := strings.Fields(productTitle)
+
+	productWordSet := make(map[string]string)
+	for _, w := range productWords {
+		normW := removeDiacritics(strings.ToLower(w))
+		cleanW := strings.Trim(normW, ".,-()[]{}!?;:\"'")
+		if cleanW != "" {
+			productWordSet[cleanW] = w
+		}
+	}
+
+	var matchedWords []string
+	for _, qw := range queryWords {
+		normQW := removeDiacritics(qw)
+		cleanQW := strings.Trim(normQW, ".,-()[]{}!?;:\"'")
+		if cleanQW == "" {
+			continue
+		}
+
+		originalWord, exists := productWordSet[cleanQW]
+		if !exists {
+			return ""
+		}
+		matchedWords = append(matchedWords, originalWord)
+	}
+
+	if len(matchedWords) > 0 {
+		return strings.Join(matchedWords, " ")
+	}
+
+	return ""
+}
+
+// Retrieve dynamic search suggestions based on top search logs and index references
+func (s *searchService) GetHotKeywords(ctx context.Context, tenantID string, lang string, limit int) ([]string, error) {
+	logs, err := s.repo.GetTopQueries(ctx, tenantID, limit*3)
+	if err != nil {
+		return nil, err
+	}
+
+	var keywords []string
+	seen := make(map[string]bool)
+
+	nameField := "product_name_vi"
+	if lang == "en" {
+		nameField = "product_name_en"
+	} else if lang == "th" {
+		nameField = "product_name_th"
+	}
+
+	for _, logEntry := range logs {
+		if len(keywords) >= limit {
+			break
+		}
+
+		products, _, _, err := s.indexer.SearchProducts(ctx, tenantID, logEntry.NormalizedQuery, nil, lang, 0, 1)
+		if err != nil || len(products) == 0 {
+			continue
+		}
+
+		firstProduct := products[0]
+		productName, _ := firstProduct[nameField].(string)
+		if productName == "" && nameField != "product_name_vi" {
+			productName, _ = firstProduct["product_name_vi"].(string)
+		}
+
+		norm := normalizeQueryWithProduct(logEntry.NormalizedQuery, productName)
+		if norm == "" {
+			continue
+		}
+
+		key := removeDiacritics(strings.ToLower(norm))
+		if !seen[key] {
+			seen[key] = true
+			keywords = append(keywords, norm)
+		}
+	}
+
+	if len(keywords) < limit {
+		defaultKeywords := []string{"Bàn phím cơ", "Chuột không dây", "Keycap", "Tai nghe", "Bàn di chuột"}
+		if lang == "en" {
+			defaultKeywords = []string{"Mechanical Keyboard", "Wireless Mouse", "Keycap", "Headphone", "Mousepad"}
+		} else if lang == "th" {
+			defaultKeywords = []string{"คีย์บอร์ดกลไก", "เมาส์ไร้สาย", "คีย์แคป", "หูฟัง", "แผ่นรองเมาส์"}
+		}
+
+		for _, dk := range defaultKeywords {
+			if len(keywords) >= limit {
+				break
+			}
+			key := removeDiacritics(strings.ToLower(dk))
+			if !seen[key] {
+				seen[key] = true
+				keywords = append(keywords, dk)
+			}
+		}
+	}
+
+	return keywords, nil
 }

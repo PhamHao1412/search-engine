@@ -36,6 +36,8 @@ type MockSearchRepository struct {
 	GetAllTenantsFn            func(ctx context.Context) ([]entity.Tenant, error)
 	DeleteSpellcheckRuleFn     func(ctx context.Context, tenantID, id string) error
 	DeleteSearchSynonymFn      func(ctx context.Context, tenantID, id string) error
+	GetSearchTranslationsFn    func(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error)
+	GetTopQueriesFn            func(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error)
 
 	SavedJobs         map[string]*entity.SearchSyncJob
 	SavedTranslations []*entity.ProductTranslation
@@ -227,12 +229,26 @@ func (m *MockSearchRepository) DeleteSearchSynonym(ctx context.Context, tenantID
 	return nil
 }
 
+func (m *MockSearchRepository) GetSearchTranslations(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error) {
+	if m.GetSearchTranslationsFn != nil {
+		return m.GetSearchTranslationsFn(ctx, tenantID)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) GetTopQueries(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error) {
+	if m.GetTopQueriesFn != nil {
+		return m.GetTopQueriesFn(ctx, tenantID, limit)
+	}
+	return nil, nil
+}
+
 // MockProductIndexer implements service.ProductIndexer
 type MockProductIndexer struct {
 	IndexProductFn    func(ctx context.Context, doc map[string]interface{}, productID string) error
 	UpdateProductFn   func(ctx context.Context, doc map[string]interface{}, productID string) error
-	SearchProductsFn  func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error)
-	SuggestProductsFn func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error)
+	SearchProductsFn  func(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error)
+	SuggestProductsFn func(ctx context.Context, tenantID, query, lang string) ([]entity.Suggestion, error)
 	IndexedDocs       map[string]map[string]interface{}
 }
 
@@ -265,32 +281,35 @@ func (m *MockProductIndexer) UpdateProduct(ctx context.Context, doc map[string]i
 
 func (m *MockProductIndexer) EnsureIndex(ctx context.Context) {}
 
-func (m *MockProductIndexer) SearchProducts(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
+func (m *MockProductIndexer) SearchProducts(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error) {
 	if m.SearchProductsFn != nil {
-		return m.SearchProductsFn(ctx, tenantID, query, synonymSegments, from, size)
+		return m.SearchProductsFn(ctx, tenantID, query, synonymSegments, lang, from, size)
 	}
 	return nil, 0, "", nil
 }
 
-func (m *MockProductIndexer) SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
+func (m *MockProductIndexer) SuggestProducts(ctx context.Context, tenantID, query, lang string) ([]entity.Suggestion, error) {
 	if m.SuggestProductsFn != nil {
-		return m.SuggestProductsFn(ctx, tenantID, query)
+		return m.SuggestProductsFn(ctx, tenantID, query, lang)
 	}
 	return nil, nil
 }
 
 // MockProductCache implements service.ProductCache
 type MockProductCache struct {
-	CacheProductFn         func(ctx context.Context, tenantID, productID string, data map[string]interface{}) error
-	GetCachedSearchFn      func(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error)
-	CacheSearchFn          func(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
-	GetCachedSuggestionsFn func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error)
-	CacheSuggestionsFn     func(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error
-	GetCachedSpellcheckFn  func(ctx context.Context, tenantID, typoWord string) (string, bool, error)
-	CacheSpellcheckFn      func(ctx context.Context, tenantID, typoWord, correctWord string) error
-	GetCachedSynonymsFn    func(ctx context.Context, tenantID string) (map[string][]string, bool, error)
-	CacheSynonymsFn        func(ctx context.Context, tenantID string, synonyms map[string][]string) error
-	DeleteSynonymsCacheFn  func(ctx context.Context, tenantID string) error
+	CacheProductFn            func(ctx context.Context, tenantID, productID string, data map[string]interface{}) error
+	GetCachedSearchFn         func(ctx context.Context, tenantID, query, lang string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error)
+	CacheSearchFn             func(ctx context.Context, tenantID, query, lang string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error
+	GetCachedSuggestionsFn    func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error)
+	CacheSuggestionsFn        func(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error
+	GetCachedSpellcheckFn     func(ctx context.Context, tenantID, typoWord string) (string, bool, error)
+	CacheSpellcheckFn         func(ctx context.Context, tenantID, typoWord, correctWord string) error
+	GetCachedSynonymsFn       func(ctx context.Context, tenantID string) (map[string][]string, bool, error)
+	CacheSynonymsFn           func(ctx context.Context, tenantID string, synonyms map[string][]string) error
+	DeleteSynonymsCacheFn     func(ctx context.Context, tenantID string) error
+	GetCachedTranslationsFn   func(ctx context.Context, tenantID string) (map[string][]string, bool, error)
+	CacheTranslationsFn       func(ctx context.Context, tenantID string, translations map[string][]string) error
+	DeleteTranslationsCacheFn func(ctx context.Context, tenantID string) error
 }
 
 func (m *MockProductCache) CacheProduct(ctx context.Context, tenantID, productID string, data map[string]interface{}) error {
@@ -300,16 +319,16 @@ func (m *MockProductCache) CacheProduct(ctx context.Context, tenantID, productID
 	return nil
 }
 
-func (m *MockProductCache) GetCachedSearch(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
+func (m *MockProductCache) GetCachedSearch(ctx context.Context, tenantID, query, lang string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
 	if m.GetCachedSearchFn != nil {
-		return m.GetCachedSearchFn(ctx, tenantID, query, page, pageSize)
+		return m.GetCachedSearchFn(ctx, tenantID, query, lang, page, pageSize)
 	}
 	return nil, 0, "", false, nil
 }
 
-func (m *MockProductCache) CacheSearch(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error {
+func (m *MockProductCache) CacheSearch(ctx context.Context, tenantID, query, lang string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error {
 	if m.CacheSearchFn != nil {
-		return m.CacheSearchFn(ctx, tenantID, query, page, pageSize, data, total, searchLogID)
+		return m.CacheSearchFn(ctx, tenantID, query, lang, page, pageSize, data, total, searchLogID)
 	}
 	return nil
 }
@@ -367,6 +386,27 @@ func (m *MockProductCache) CacheSynonyms(ctx context.Context, tenantID string, s
 func (m *MockProductCache) DeleteSynonymsCache(ctx context.Context, tenantID string) error {
 	if m.DeleteSynonymsCacheFn != nil {
 		return m.DeleteSynonymsCacheFn(ctx, tenantID)
+	}
+	return nil
+}
+
+func (m *MockProductCache) GetCachedTranslations(ctx context.Context, tenantID string) (map[string][]string, bool, error) {
+	if m.GetCachedTranslationsFn != nil {
+		return m.GetCachedTranslationsFn(ctx, tenantID)
+	}
+	return nil, false, nil
+}
+
+func (m *MockProductCache) CacheTranslations(ctx context.Context, tenantID string, translations map[string][]string) error {
+	if m.CacheTranslationsFn != nil {
+		return m.CacheTranslationsFn(ctx, tenantID, translations)
+	}
+	return nil
+}
+
+func (m *MockProductCache) DeleteTranslationsCache(ctx context.Context, tenantID string) error {
+	if m.DeleteTranslationsCacheFn != nil {
+		return m.DeleteTranslationsCacheFn(ctx, tenantID)
 	}
 	return nil
 }
@@ -438,9 +478,6 @@ func TestSyncProduct_Success(t *testing.T) {
 	if doc["product_name_en"] != "Bàn phím cơ_en" {
 		t.Errorf("Expected translated EN name, got: %s", doc["product_name_en"])
 	}
-	if !strings.Contains(doc["search_tags"].(string), "tag1") {
-		t.Errorf("Expected search tags, got: %s", doc["search_tags"])
-	}
 }
 
 func TestSyncProduct_TranslationFailure(t *testing.T) {
@@ -490,54 +527,6 @@ func TestSyncProduct_TranslationFailure(t *testing.T) {
 	}
 	if doc["product_name_en"] != "Bàn phím cơ" {
 		t.Errorf("Expected fallback to original name, got: %s", doc["product_name_en"])
-	}
-}
-
-func TestSyncProduct_AIFailure(t *testing.T) {
-	repo := NewMockSearchRepository()
-	indexer := NewMockProductIndexer()
-	cache := &MockProductCache{}
-	translator := &MockTranslationService{}
-	tagsGen := &MockTagGenerator{
-		GenerateSearchTagsFn: func(ctx context.Context, name, description string) ([]string, error) {
-			return nil, errors.New("openai rate limit")
-		},
-	}
-
-	syncSvc := service.NewSyncService(repo, indexer, cache, translator, tagsGen)
-
-	product := entity.Product{
-		ID:               "prod-123",
-		TenantID:         "tenant-abc",
-		Name:             "Bàn phím cơ",
-		Description:      "Bàn phím cơ giá rẻ",
-		Price:            50.0,
-		OriginalLanguage: "vi",
-	}
-
-	err := syncSvc.SyncProduct(context.Background(), product)
-	// Should NOT return error because business logic dictates eventual consistency for AI errors
-	if err != nil {
-		t.Fatalf("Expected no block error for AI failure, got: %v", err)
-	}
-
-	// Verify sync job status
-	job, ok := repo.SavedJobs[product.ID]
-	if !ok {
-		t.Fatal("Sync job was not saved")
-	}
-	if job.Status != "failed_ai" {
-		t.Errorf("Expected job status to be 'failed_ai', got '%s'", job.Status)
-	}
-
-	// Verify indexing content (should use fallback default tags)
-	doc, ok := indexer.IndexedDocs[product.ID]
-	if !ok {
-		t.Fatal("Product was not indexed in OpenSearch")
-	}
-	tagsStr := doc["search_tags"].(string)
-	if !strings.Contains(tagsStr, "sảnphẩm") && !strings.Contains(tagsStr, "amaze") {
-		t.Errorf("Expected fallback default tags, got: %s", tagsStr)
 	}
 }
 
@@ -631,10 +620,8 @@ func TestSyncProduct_TextHashCheck(t *testing.T) {
 		},
 	}
 
-	aiCalled := false
 	tagsGen := &MockTagGenerator{
 		GenerateSearchTagsFn: func(ctx context.Context, name, description string) ([]string, error) {
-			aiCalled = true
 			return []string{"keyboard"}, nil
 		},
 	}
@@ -651,19 +638,18 @@ func TestSyncProduct_TextHashCheck(t *testing.T) {
 		OriginalLanguage: "vi",
 	}
 
-	// 1st sync (full flow)
+	// Perform full sync on first call
 	err := syncSvc.SyncProduct(context.Background(), product)
 	if err != nil {
 		t.Fatalf("1st sync failed: %v", err)
 	}
 
-	if !translateCalled || !aiCalled {
-		t.Error("Expected translate and AI to be called on first sync")
+	if !translateCalled {
+		t.Error("Expected translate to be called on first sync")
 	}
 
 	// Reset tracking
 	translateCalled = false
-	aiCalled = false
 
 	// Update non-text fields (inventory and price)
 	product.Inventory = 99
@@ -679,14 +665,14 @@ func TestSyncProduct_TextHashCheck(t *testing.T) {
 		return nil
 	}
 
-	// 2nd sync (should use partial update since text is identical)
+	// Perform partial update when text hash is identical
 	err = syncSvc.SyncProduct(context.Background(), product)
 	if err != nil {
 		t.Fatalf("2nd sync failed: %v", err)
 	}
 
-	if translateCalled || aiCalled {
-		t.Error("Expected translate and AI to be skipped on duplicate text hash")
+	if translateCalled {
+		t.Error("Expected translate to be skipped on duplicate text hash")
 	}
 
 	if !updateCalled {

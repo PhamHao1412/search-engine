@@ -328,10 +328,14 @@ const Admin: React.FC = () => {
     <div className="admin-layout">
       {/* COLLAPSIBLE SIDEBAR */}
       <aside className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="admin-sidebar-header">
+        <div 
+          className="admin-sidebar-header" 
+          onClick={() => navigate('/')} 
+          style={{ cursor: 'pointer' }}
+        >
           <Settings className="text-gradient" size={26} strokeWidth={2.5} style={{ flexShrink: 0 }} />
           <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em' }} className="admin-menu-text">
-            Amaze<span style={{ color: 'var(--primary)' }}>Search</span>
+            Swift<span style={{ color: 'var(--primary)' }}>Search</span>
           </span>
         </div>
 

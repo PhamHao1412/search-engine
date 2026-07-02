@@ -41,18 +41,18 @@ func TestSearchService_CacheHit(t *testing.T) {
 	cachedProducts := []map[string]interface{}{
 		{"id": "p-1", "product_name_vi": "Sản phẩm cached"},
 	}
-	cache.GetCachedSearchFn = func(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
+	cache.GetCachedSearchFn = func(ctx context.Context, tenantID, query, lang string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
 		return cachedProducts, 1, "cached-log-id", true, nil
 	}
 
 	// Verify Indexer is NOT called
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error) {
 		t.Fatal("Indexer should not be called on cache hit")
 		return nil, 0, "", nil
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
-	res, total, searchLogID, _, _, err := svc.Search(context.Background(), "tenant-1", "test-query", 1, 20)
+	res, total, searchLogID, _, _, err := svc.Search(context.Background(), "tenant-1", "test-query", "vi", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -80,7 +80,7 @@ func TestSearchService_CacheMiss(t *testing.T) {
 	analytics := &MockAnalyticsRepository{}
 
 	// Setup Cache Miss
-	cache.GetCachedSearchFn = func(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
+	cache.GetCachedSearchFn = func(ctx context.Context, tenantID, query, lang string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
 		return nil, 0, "", false, nil
 	}
 
@@ -88,13 +88,13 @@ func TestSearchService_CacheMiss(t *testing.T) {
 	indexedProducts := []map[string]interface{}{
 		{"id": "p-2", "product_name_vi": "Sản phẩm indexed"},
 	}
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error) {
 		return indexedProducts, 1, "", nil
 	}
 
 	// Mock Cache Set
 	var cacheSetCalled bool
-	cache.CacheSearchFn = func(ctx context.Context, tenantID, query string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error {
+	cache.CacheSearchFn = func(ctx context.Context, tenantID, query, lang string, page, pageSize int, data []map[string]interface{}, total int, searchLogID string) error {
 		cacheSetCalled = true
 		if len(data) != 1 || data[0]["id"] != "p-2" {
 			t.Errorf("Expected data indexed to be cached, got %v", data)
@@ -109,7 +109,7 @@ func TestSearchService_CacheMiss(t *testing.T) {
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
-	res, total, _, _, _, err := svc.Search(context.Background(), "tenant-1", "test-query", 1, 20)
+	res, total, _, _, _, err := svc.Search(context.Background(), "tenant-1", "test-query", "vi", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -136,7 +136,7 @@ func TestSearchService_Normalization(t *testing.T) {
 	cache := &MockProductCache{}
 	analytics := &MockAnalyticsRepository{}
 
-	cache.GetCachedSearchFn = func(ctx context.Context, tenantID, query string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
+	cache.GetCachedSearchFn = func(ctx context.Context, tenantID, query, lang string, page, pageSize int) ([]map[string]interface{}, int, string, bool, error) {
 		// Verify query is normalized when checking cache
 		if query != "ca phe sua" {
 			t.Errorf("Expected query to be normalized as 'ca phe sua', got: '%s'", query)
@@ -144,7 +144,7 @@ func TestSearchService_Normalization(t *testing.T) {
 		return nil, 0, "", false, nil
 	}
 
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error) {
 		// Verify query is normalized when searching in OpenSearch
 		if query != "ca phe sua" {
 			t.Errorf("Expected query to be normalized as 'ca phe sua', got: '%s'", query)
@@ -153,7 +153,7 @@ func TestSearchService_Normalization(t *testing.T) {
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
-	_, _, _, _, _, err := svc.Search(context.Background(), "tenant-1", "   Ca   phe   Sua   ", 1, 20)
+	_, _, _, _, _, err := svc.Search(context.Background(), "tenant-1", "   Ca   phe   Sua   ", "vi", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -166,7 +166,7 @@ func TestSearchService_QueryLengthLimit(t *testing.T) {
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
 	longQuery := strings.Repeat("a", 101)
-	_, _, _, _, _, err := svc.Search(context.Background(), "tenant-1", longQuery, 1, 20)
+	_, _, _, _, _, err := svc.Search(context.Background(), "tenant-1", longQuery, "vi", 1, 20)
 	if err == nil {
 		t.Fatal("Expected error for query longer than 100 characters, got nil")
 	}
@@ -219,20 +219,20 @@ func TestSearchService_Suggest_CacheHit(t *testing.T) {
 		{ID: "p-2", Text: "Bàn phím cơ Ajazz", Brand: "Ajazz", Price: 80000},
 	}
 	cache.GetCachedSuggestionsFn = func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, bool, error) {
-		if tenantID != "tenant-1" || query != "ban" {
+		if tenantID != "tenant-1" || query != "ban:vi" {
 			t.Errorf("Unexpected cache hit query params: tenantID=%s, query=%s", tenantID, query)
 		}
 		return cachedSuggestions, true, nil
 	}
 
 	// Verify Indexer is NOT called
-	indexer.SuggestProductsFn = func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
+	indexer.SuggestProductsFn = func(ctx context.Context, tenantID, query, lang string) ([]entity.Suggestion, error) {
 		t.Fatal("Indexer should not be called on cache hit")
 		return nil, nil
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
-	res, err := svc.Suggest(context.Background(), "tenant-1", "ban")
+	res, err := svc.Suggest(context.Background(), "tenant-1", "ban", "vi")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -257,9 +257,9 @@ func TestSearchService_Suggest_CacheMiss(t *testing.T) {
 		{ID: "p-3", Text: "Logitech G Pro", Brand: "Logitech", Price: 3190000},
 		{ID: "p-4", Text: "Logitech MX Master", Brand: "Logitech", Price: 2490000},
 	}
-	indexer.SuggestProductsFn = func(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
-		if tenantID != "tenant-1" || query != "logi" {
-			t.Errorf("Unexpected indexer query params: tenantID=%s, query=%s", tenantID, query)
+	indexer.SuggestProductsFn = func(ctx context.Context, tenantID, query, lang string) ([]entity.Suggestion, error) {
+		if tenantID != "tenant-1" || query != "logi" || lang != "vi" {
+			t.Errorf("Unexpected indexer query params: tenantID=%s, query=%s, lang=%s", tenantID, query, lang)
 		}
 		return indexedSuggestions, nil
 	}
@@ -268,6 +268,9 @@ func TestSearchService_Suggest_CacheMiss(t *testing.T) {
 	var cacheSetCalled bool
 	cache.CacheSuggestionsFn = func(ctx context.Context, tenantID, query string, suggestions []entity.Suggestion) error {
 		cacheSetCalled = true
+		if query != "logi:vi" {
+			t.Errorf("Unexpected cache set query: %s", query)
+		}
 		if len(suggestions) != 2 || suggestions[0].Text != "Logitech G Pro" {
 			t.Errorf("Unexpected cached suggestions: %v", suggestions)
 		}
@@ -275,7 +278,7 @@ func TestSearchService_Suggest_CacheMiss(t *testing.T) {
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
-	res, err := svc.Suggest(context.Background(), "tenant-1", "logi")
+	res, err := svc.Suggest(context.Background(), "tenant-1", "logi", "vi")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -297,7 +300,7 @@ func TestSearchService_Suggest_ShortQuery(t *testing.T) {
 	svc := service.NewSearchService(indexer, cache, analytics, nil)
 
 	// Short query (< 2 characters) should immediately return empty results without hitting cache/indexer
-	res, err := svc.Suggest(context.Background(), "tenant-1", "a")
+	res, err := svc.Suggest(context.Background(), "tenant-1", "a", "vi")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -326,7 +329,7 @@ func TestSearchService_Spellcheck_Tier1(t *testing.T) {
 	}
 
 	// We expect search to run for "akko"
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error) {
 		if query != "akko" {
 			t.Errorf("Expected search query to be corrected to 'akko', got '%s'", query)
 		}
@@ -334,7 +337,7 @@ func TestSearchService_Spellcheck_Tier1(t *testing.T) {
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, repo)
-	res, total, _, spellcheckCorrected, autoCorrected, err := svc.Search(context.Background(), "tenant-1", "ako", 1, 20)
+	res, total, _, spellcheckCorrected, autoCorrected, err := svc.Search(context.Background(), "tenant-1", "ako", "vi", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -365,7 +368,7 @@ func TestSearchService_Spellcheck_Tier2(t *testing.T) {
 	}
 
 	// OpenSearch returns suggestion "iphone" for query "iphne"
-	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error) {
 		if query != "iphne" {
 			t.Errorf("Expected query 'iphne' to be sent to indexer, got '%s'", query)
 		}
@@ -374,7 +377,7 @@ func TestSearchService_Spellcheck_Tier2(t *testing.T) {
 	}
 
 	svc := service.NewSearchService(indexer, cache, analytics, repo)
-	res, total, _, spellcheckCorrected, autoCorrected, err := svc.Search(context.Background(), "tenant-1", "iphne", 1, 20)
+	res, total, _, spellcheckCorrected, autoCorrected, err := svc.Search(context.Background(), "tenant-1", "iphne", "vi", 1, 20)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -390,5 +393,100 @@ func TestSearchService_Spellcheck_Tier2(t *testing.T) {
 	}
 	if total != 0 {
 		t.Errorf("Expected total 0, got %d", total)
+	}
+}
+
+func TestSearchService_Multilingual_Search(t *testing.T) {
+	indexer := NewMockProductIndexer()
+	cache := &MockProductCache{}
+	analytics := &MockAnalyticsRepository{}
+	repo := NewMockSearchRepository()
+
+	// Seed search_translations mock
+	// Translation mappings for coffee
+	repo.GetSearchTranslationsFn = func(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error) {
+		return []entity.SearchTranslation{
+			{Keyword: "coffee", Translation: "cà phê", LangCode: "vi", Status: "active"},
+			{Keyword: "coffee", Translation: "กาแฟ", LangCode: "th", Status: "active"},
+		}, nil
+	}
+
+	// We expect the query "coffee" to expand to "coffee" and its translations
+	var searchLang string
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error) {
+		searchLang = lang
+		// Verify synonymSegments contains translations
+		foundVi := false
+		foundTh := false
+		for _, segment := range synonymSegments {
+			for _, term := range segment {
+				if term == "cà phê" {
+					foundVi = true
+				}
+				if term == "กาแฟ" {
+					foundTh = true
+				}
+			}
+		}
+		if !foundVi || !foundTh {
+			t.Errorf("Expected translation expansions not found in synonymSegments: %+v", synonymSegments)
+		}
+		return []map[string]interface{}{{"id": "p-1", "product_name_th": "กาแฟ"}}, 1, "", nil
+	}
+
+	svc := service.NewSearchService(indexer, cache, analytics, repo)
+	_, _, _, _, _, err := svc.Search(context.Background(), "tenant-1", "coffee", "th", 1, 20)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if searchLang != "th" {
+		t.Errorf("Expected search language to be passed as 'th', got '%s'", searchLang)
+	}
+}
+
+// Verify search query normalization and hot keywords fetching
+func TestSearchService_GetHotKeywords(t *testing.T) {
+	indexer := NewMockProductIndexer()
+	cache := &MockProductCache{}
+	analytics := &MockAnalyticsRepository{}
+	repo := NewMockSearchRepository()
+
+	repo.GetTopQueriesFn = func(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error) {
+		return []entity.SearchLog{
+			{Query: "ban phim akko", NormalizedQuery: "ban phim akko", ResultCount: 12},
+			{Query: "chuot logitek", NormalizedQuery: "chuot logitech", ResultCount: 8},
+		}, nil
+	}
+
+	indexer.SearchProductsFn = func(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error) {
+		if query == "ban phim akko" {
+			return []map[string]interface{}{
+				{"id": "p-1", "product_name_vi": "Bàn phím cơ Akko 3098B"},
+			}, 1, "", nil
+		}
+		if query == "chuot logitech" {
+			return []map[string]interface{}{
+				{"id": "p-2", "product_name_vi": "Chuột không dây Logitech G Pro"},
+			}, 1, "", nil
+		}
+		return nil, 0, "", nil
+	}
+
+	svc := service.NewSearchService(indexer, cache, analytics, repo)
+	keywords, err := svc.GetHotKeywords(context.Background(), "tenant-1", "vi", 5)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	expected := []string{"Bàn phím Akko", "Chuột Logitech", "Bàn phím cơ", "Chuột không dây", "Keycap"}
+	if len(keywords) != 5 {
+		t.Fatalf("Expected 5 keywords, got %d: %+v", len(keywords), keywords)
+	}
+
+	for i, exp := range expected {
+		if keywords[i] != exp {
+			t.Errorf("Expected keyword at index %d to be %q, got %q", i, exp, keywords[i])
+		}
 	}
 }

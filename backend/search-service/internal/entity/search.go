@@ -144,6 +144,9 @@ type Suggestion struct {
 	ProductNameVI string  `json:"product_name_vi"`
 	ProductNameEN string  `json:"product_name_en"`
 	ProductNameTH string  `json:"product_name_th"`
+	DescriptionVI string  `json:"description_vi"`
+	DescriptionEN string  `json:"description_en"`
+	DescriptionTH string  `json:"description_th"`
 	ImageURL      string  `json:"image_url"`
 	Inventory     int     `json:"inventory"`
 }
@@ -157,4 +160,19 @@ type Tenant struct {
 
 func (Tenant) TableName() string {
 	return "product_svc.tenants"
+}
+
+type SearchTranslation struct {
+	ID          string    `gorm:"type:uuid;primaryKey" json:"id"`
+	TenantID    string    `gorm:"type:uuid;not null" json:"tenant_id"`
+	Keyword     string    `gorm:"type:varchar(255);not null" json:"keyword"`
+	LangCode    string    `gorm:"type:varchar(10);not null" json:"lang_code"`
+	Translation string    `gorm:"type:varchar(255);not null" json:"translation"`
+	Status      string    `gorm:"type:varchar(50);not null;default:'active'" json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (SearchTranslation) TableName() string {
+	return "search_svc.search_translations"
 }

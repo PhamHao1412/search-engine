@@ -1,6 +1,6 @@
 # Kỹ năng vận hành cho AI Agent (Agent Skills & Commands)
 
-Tài liệu này chứa các hướng dẫn chạy lệnh, kiểm tra hạ tầng, vận hành dữ liệu và kiểm thử dự án **Amaze Search Engine** dành cho AI Agent.
+Tài liệu này chứa các hướng dẫn chạy lệnh, kiểm tra hạ tầng, vận hành dữ liệu và kiểm thử dự án **SwiftSearch Engine** dành cho AI Agent.
 
 ---
 
@@ -9,7 +9,7 @@ Tài liệu này chứa các hướng dẫn chạy lệnh, kiểm tra hạ tần
 Khi cần cập nhật cấu trúc cơ sở dữ liệu (PostgreSQL), Agent phải sử dụng công cụ **Goose**. 
 
 *   Thư mục chứa migration: `backend/scripts/migrations/`
-*   Chuỗi kết nối PostgreSQL local: `postgres://postgres:postgrespassword@localhost:5438/amaze_search?sslmode=disable&search_path=public`
+*   Chuỗi kết nối PostgreSQL local: `postgres://postgres:postgrespassword@localhost:5438/swiftsearch_search?sslmode=disable&search_path=public`
 
 ### Các lệnh phổ biến:
 
@@ -19,15 +19,15 @@ Khi cần cập nhật cấu trúc cơ sở dữ liệu (PostgreSQL), Agent ph�
     ```
 *   **Chạy toàn bộ migrations lên (Up)**:
     ```bash
-    goose -dir backend/scripts/migrations postgres "postgres://postgres:postgrespassword@localhost:5438/amaze_search?sslmode=disable&search_path=public" up
+    goose -dir backend/scripts/migrations postgres "postgres://postgres:postgrespassword@localhost:5438/swiftsearch_search?sslmode=disable&search_path=public" up
     ```
 *   **Hạ phiên bản migration xuống 1 cấp (Down)**:
     ```bash
-    goose -dir backend/scripts/migrations postgres "postgres://postgres:postgrespassword@localhost:5438/amaze_search?sslmode=disable&search_path=public" down
+    goose -dir backend/scripts/migrations postgres "postgres://postgres:postgrespassword@localhost:5438/swiftsearch_search?sslmode=disable&search_path=public" down
     ```
 *   **Kiểm tra trạng thái các migrations**:
     ```bash
-    goose -dir backend/scripts/migrations postgres "postgres://postgres:postgrespassword@localhost:5438/amaze_search?sslmode=disable&search_path=public" status
+    goose -dir backend/scripts/migrations postgres "postgres://postgres:postgrespassword@localhost:5438/swiftsearch_search?sslmode=disable&search_path=public" status
     ```
 
 ---
@@ -42,7 +42,7 @@ Trước khi chạy code hoặc chạy test tích hợp, Agent cần xác minh t
     ```
 *   **Kiểm tra kết nối Redis**:
     ```bash
-    docker exec -it amaze-redis redis-cli ping
+    docker exec -it swiftsearch-redis redis-cli ping
     # Kết quả mong muốn: PONG
     ```
 *   **Kiểm tra kết nối OpenSearch**:
@@ -52,7 +52,7 @@ Trước khi chạy code hoặc chạy test tích hợp, Agent cần xác minh t
     ```
 *   **Kiểm tra Kafka Broker**:
     ```bash
-    docker exec -it amaze-kafka kafka-topics --bootstrap-server localhost:9092 --list
+    docker exec -it swiftsearch-kafka kafka-topics --bootstrap-server localhost:9092 --list
     ```
 
 ---
@@ -113,17 +113,17 @@ Khi cần kiểm tra luồng truyền nhận sự kiện (Event Stream) mà khô
 
 *   **Tạo một Topic mới**:
     ```bash
-    docker exec -it amaze-kafka kafka-topics --bootstrap-server localhost:9092 --create --topic product-ingestion-events --partitions 1 --replication-factor 1
+    docker exec -it swiftsearch-kafka kafka-topics --bootstrap-server localhost:9092 --create --topic product-ingestion-events --partitions 1 --replication-factor 1
     ```
 *   **Gửi thử một message (Producer)**:
     ```bash
-    docker exec -it amaze-kafka kafka-console-producer --bootstrap-server localhost:9092 --topic product-ingestion-events
+    docker exec -it swiftsearch-kafka kafka-console-producer --bootstrap-server localhost:9092 --topic product-ingestion-events
     # Gõ nội dung JSON rồi ấn Enter:
     # {"event_id":"123", "event_type":"ProductCreated", "product_id":"uuid-test"}
     ```
 *   **Theo dõi và kiểm tra message đến (Consumer)**:
     ```bash
-    docker exec -it amaze-kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic product-ingestion-events --from-beginning
+    docker exec -it swiftsearch-kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic product-ingestion-events --from-beginning
     ```
 
 ---

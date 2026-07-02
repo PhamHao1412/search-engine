@@ -180,7 +180,6 @@ func (idx *opensearchIndexer) EnsureIndex(ctx context.Context) {
 				"inventory": { "type": "integer" },
 				"featured": { "type": "boolean" },
 				"status": { "type": "keyword" },
-				"search_tags": { "type": "text", "analyzer": "vi_ascii_analyzer" },
 				"suggest": {
 					"type": "text",
 					"analyzer": "autocomplete_analyzer",
@@ -226,7 +225,45 @@ func (idx *opensearchIndexer) EnsureIndex(ctx context.Context) {
 	}
 }
 
-func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, query string, synonymSegments [][]string, from, size int) ([]map[string]interface{}, int, string, error) {
+func getTargetFields(lang string) []string {
+	switch strings.ToLower(lang) {
+	case "en":
+		return []string{
+			"product_name_en^5.0",
+			"product_name_vi^1.5",
+			"product_name_th^1.5",
+			"description_en^1.0",
+			"description_vi^0.5",
+			"description_th^0.5",
+			"brand",
+			"suggest",
+		}
+	case "th":
+		return []string{
+			"product_name_th^5.0",
+			"product_name_en^1.5",
+			"product_name_vi^1.5",
+			"description_th^1.0",
+			"description_en^0.5",
+			"description_vi^0.5",
+			"brand",
+			"suggest",
+		}
+	default: // vi or vn
+		return []string{
+			"product_name_vi^5.0",
+			"product_name_en^1.5",
+			"product_name_th^1.5",
+			"description_vi^1.0",
+			"description_en^0.5",
+			"description_th^0.5",
+			"brand",
+			"suggest",
+		}
+	}
+}
+
+func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, query string, synonymSegments [][]string, lang string, from, size int) ([]map[string]interface{}, int, string, error) {
 	var innerQuery map[string]interface{}
 	trimmedQuery := strings.TrimSpace(query)
 	if trimmedQuery == "" {
@@ -245,15 +282,7 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 			},
 		}
 	} else {
-		targetFields := []string{
-			"product_name_vi^4",
-			"product_name_en^2",
-			"description_vi",
-			"description_en",
-			"brand",
-			"search_tags",
-			"suggest",
-		}
+		targetFields := getTargetFields(lang)
 
 		searchClauses := make([]interface{}, 0)
 
@@ -430,8 +459,6 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 		return nil, 0, "", err
 	}
 
-	log.Printf("[DEBUG SearchProducts Query] JSON payload: %s", string(bodyBytes))
-
 	req := opensearchapi.SearchRequest{
 		Index: []string{"products"},
 		Body:  strings.NewReader(string(bodyBytes)),
@@ -486,9 +513,18 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 	return products, searchResponse.Hits.Total.Value, suggestedQuery, nil
 }
 
-func (idx *opensearchIndexer) SuggestProducts(ctx context.Context, tenantID, query string) ([]entity.Suggestion, error) {
+func (idx *opensearchIndexer) SuggestProducts(ctx context.Context, tenantID, query, lang string) ([]entity.Suggestion, error) {
+	fields := []string{"product_name_vi^1.5", "product_name_en^1.5", "product_name_th^1.5", "brand"}
+	if lang == "en" {
+		fields = []string{"product_name_en^5.0", "product_name_vi^1.5", "product_name_th^1.5", "brand"}
+	} else if lang == "th" {
+		fields = []string{"product_name_th^5.0", "product_name_vi^1.5", "product_name_en^1.5", "brand"}
+	} else if lang == "vi" {
+		fields = []string{"product_name_vi^5.0", "product_name_en^1.5", "product_name_th^1.5", "brand"}
+	}
+
 	suggestQuery := map[string]interface{}{
-		"_source": []string{"id", "brand", "price", "product_name_vi", "product_name_en", "product_name_th", "image_url", "inventory"},
+		"_source": []string{"id", "brand", "price", "product_name_vi", "product_name_en", "product_name_th", "description_vi", "description_en", "description_th", "image_url", "inventory"},
 		"size":    10,
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
@@ -513,7 +549,7 @@ func (idx *opensearchIndexer) SuggestProducts(ctx context.Context, tenantID, que
 								map[string]interface{}{
 									"multi_match": map[string]interface{}{
 										"query":    query,
-										"fields":   []string{"product_name_vi", "product_name_en", "product_name_th", "brand"},
+										"fields":   fields,
 										"operator": "and",
 									},
 								},
@@ -557,6 +593,9 @@ func (idx *opensearchIndexer) SuggestProducts(ctx context.Context, tenantID, que
 					ProductNameVI string  `json:"product_name_vi"`
 					ProductNameEN string  `json:"product_name_en"`
 					ProductNameTH string  `json:"product_name_th"`
+					DescriptionVI string  `json:"description_vi"`
+					DescriptionEN string  `json:"description_en"`
+					DescriptionTH string  `json:"description_th"`
 					ImageURL      string  `json:"image_url"`
 					Inventory     int     `json:"inventory"`
 				} `json:"_source"`
@@ -583,6 +622,9 @@ func (idx *opensearchIndexer) SuggestProducts(ctx context.Context, tenantID, que
 				ProductNameVI: hit.Source.ProductNameVI,
 				ProductNameEN: hit.Source.ProductNameEN,
 				ProductNameTH: hit.Source.ProductNameTH,
+				DescriptionVI: hit.Source.DescriptionVI,
+				DescriptionEN: hit.Source.DescriptionEN,
+				DescriptionTH: hit.Source.DescriptionTH,
 				ImageURL:      hit.Source.ImageURL,
 				Inventory:     hit.Source.Inventory,
 			}
