@@ -1,6 +1,6 @@
 # US-006 - Multilingual Search
 
-Status: Draft
+Status: Implemented
 Priority: High
 Related Requirements:
 * FR-005 Multilingual Search
@@ -40,6 +40,13 @@ Tôi muốn tìm kiếm sản phẩm bằng ngôn ngữ ưa thích của mình (
    * Chuyển đổi số nhiều/số ít, động từ chia thì về từ gốc cho tiếng Anh.
 6. Trả về kết quả khớp đa ngôn ngữ tốt nhất cho Buyer.
 
+### API Suggest Đa Ngôn Ngữ (Gợi ý khi gõ)
+1. Buyer nhập từ khóa gõ dở (ví dụ: "coff") trên ô tìm kiếm.
+2. Frontend gửi request đến API Suggest kèm header ngôn ngữ UI (`X-Language-Key`).
+3. API Suggest tra cứu từ điển dịch thuật tĩnh (`translations`) để phát hiện và dịch từ khóa khớp tĩnh đầy đủ nếu có.
+4. API Suggest truy vấn OpenSearch với trọng số (boost: 5) cho trường tên sản phẩm khớp với ngôn ngữ UI hiện tại của Buyer, giúp sản phẩm ngôn ngữ tương ứng nổi lên đầu.
+5. API Suggest lưu cache kết quả gợi ý phân tách theo từ khóa và ngôn ngữ (dạng `query:lang`) để phản hồi nhanh chóng cho các lượt truy cập sau.
+
 ## Sequence Diagram
 
 ```mermaid
@@ -69,7 +76,9 @@ FE->>Buyer: Hiển thị sản phẩm lên màn hình
 *   **AC-001**: Khi người dùng gõ "coffee" (tiếng Anh) hoặc "กาแฟ" (tiếng Thái), hệ thống phải tìm thấy sản phẩm "Cà phê Robusta nguyên chất" (đã được dịch thuật tự động ở luồng ghi).
 *   **AC-002**: Đảm bảo phân tách từ ngữ tiếng Thái hoạt động chính xác. Tìm kiếm từ khóa ghép tiếng Thái phải trả về sản phẩm khớp ngữ nghĩa nhờ bộ `thai` analyzer của OpenSearch.
 *   **AC-003**: Hệ thống hỗ trợ mở rộng thêm ngôn ngữ mới (như tiếng Nhật, tiếng Trung) trong tương lai bằng cách định nghĩa thêm các trường `product_name_{lang}` mà không làm ảnh hưởng đến cấu trúc code hiện tại.
+*   **AC-004 (API Suggest Đa Ngôn Ngữ)**: Khi người dùng gõ từ khóa trong ô tìm kiếm ở bất kỳ ngôn ngữ nào, danh sách gợi ý tự động (auto-suggest) phải trả về sản phẩm khớp đa ngôn ngữ, đồng thời ưu tiên hiển thị các sản phẩm có ngôn ngữ khớp với ngôn ngữ giao diện đang active lên đầu nhờ cơ chế boost trọng số.
 
 ## Quy tắc nghiệp vụ (BR)
 *   **BR-001**: Trọng số tìm kiếm ngôn ngữ hiện tại của người dùng (ngôn ngữ UI) phải luôn được thiết lập cao nhất (boost: 5) để ưu tiên kết quả khớp ngôn ngữ gốc.
 *   **BR-002**: Việc dịch thuật từ khóa tìm kiếm (Search-time) chỉ sử dụng từ điển dịch thuật tĩnh (`translations` table) được Admin quản trị hoặc kết quả dịch cache, tuyệt đối **không gọi Google Translate API thời gian thực** trong luồng search của người dùng để tránh nghẽn mạng và tăng độ trễ.
+*   **BR-003**: Bộ nhớ đệm cache cho API Suggest phải được phân tách rõ rệt theo cả ngôn ngữ (`query:lang`) để tránh việc người dùng ở giao diện tiếng Anh nhận gợi ý cache của người dùng ở giao diện tiếng Việt.
