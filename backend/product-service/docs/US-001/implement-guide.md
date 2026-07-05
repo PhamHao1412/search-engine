@@ -32,7 +32,7 @@ Stores original product details.
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | Primary Key | Product UUID |
-| `tenant_id` | `varchar(255)` | Not Null, Index | Partition Key |
+| `tenant_id` | `uuid` | Not Null, Index | Partition Key |
 | `name` | `varchar(255)` | Not Null | Product name |
 | `description` | `text` | | Product details |
 | `category_id` | `uuid` | | Category ID |

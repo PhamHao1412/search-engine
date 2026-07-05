@@ -41,7 +41,7 @@ To support searching Vietnamese text with or without accents (e.g. searching `'b
 }
 ```
 
-* **Target Fields**: `product_name_vi`, `description_vi`, and `search_tags` are configured to use `vi_ascii_analyzer`.
+* **Target Fields**: `product_name_vi` and `description_vi` are configured to use `vi_ascii_analyzer`.
 * **Action**: Converts characters with diacritics into ASCII equivalents (e.g., `à` $\rightarrow$ `a`). This processes query strings and index structures identically, allowing accent-insensitive matches.
 * **Aliases**: `products_v1` is created as a physical index. A virtual **alias** `products` is configured to point to it. The codebase writes and searches exclusively through the `products` alias to allow zero-downtime reindexing.
 
@@ -60,13 +60,16 @@ To optimize performance and scale searches:
 
 Relevance scoring is calculated dynamically inside OpenSearch:
 
-1. **Multi-field Weightings**:
-   * `product_name_vi` (boost: `2.0`)
+1. **Multi-field Weightings** (Vietnamese Search Example):
+   * `product_name_vi` (boost: `5.0`)
    * `product_name_en` (boost: `1.5`)
    * `product_name_th` (boost: `1.5`)
-   * `description_vi` (boost: `0.8`)
+   * `category_name` (boost: `3.0`)
+   * `description_vi` (boost: `1.0`)
+   * `description_en` (boost: `0.5`)
+   * `description_th` (boost: `0.5`)
    * `brand` (boost: `1.0`)
-   * `search_tags` (boost: `1.0`)
+   * `suggest` (boost: `1.0`)
 2. **Relevance Boost & Decay (Function Score)**:
    * **Featured Boost**: If product has `featured = true`, its score is multiplied by `1.2`.
    * **Inventory Decay**: If product has `inventory = 0` (out of stock), its score is multiplied by `0.5` (demoting it to bottom lists).

@@ -359,7 +359,7 @@ Không được:
 Trước khi code bất kỳ User Story nào, phải đọc:
 
 1. [project-context.md](file:///Users/haopham/go-playground/search-engine/project-context.md)
-2. [sa/01-system-design.md](file:///Users/haopham/go-playground/search-engine/sa/01-system-design.md)
+2. [sa/01-architecture.md](file:///Users/haopham/go-playground/search-engine/sa/01-architecture.md)
 3. [sa/02-erd.md](file:///Users/haopham/go-playground/search-engine/sa/02-erd.md)
 4. [sa/03-opensearch-design.md](file:///Users/haopham/go-playground/search-engine/sa/03-opensearch-design.md)
 5. User Story tương ứng nằm trong `ba/user-stories/`

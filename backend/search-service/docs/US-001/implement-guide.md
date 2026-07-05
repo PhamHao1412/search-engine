@@ -5,7 +5,7 @@ This document describes the design, schema tables, and internal reprocessor work
 ---
 
 ## 1. Overview
-The `search-service` runs a background worker (`workerd`) that consumes product ingestion events, translates metadata to EN/TH languages, automatically tags product keyword indexes using AI, and performs indexing on OpenSearch.
+The `search-service` runs a background worker (`workerd`) that consumes product ingestion events, translates metadata to EN/TH languages, and performs indexing on OpenSearch.
 
 ---
 
@@ -13,7 +13,6 @@ The `search-service` runs a background worker (`workerd`) that consumes product 
 * `cmd/workerd/`: Bootstraps Kafka Consumer, scheduler, and runs the sync worker.
 * `internal/service/sync_service.go`: Processes translated elements, AI keywords, and saves DB statuses.
 * `internal/infrastructure/translate/`: Stub wrapper for Google Translate.
-* `internal/infrastructure/ai/`: Wraps OpenAI API for search tag generation.
 * `internal/repository/search_repository.go`: Handles SQL writes to postgres.
 
 ---
@@ -45,10 +44,9 @@ Tracks individual product synchronization statuses to assure eventual consistenc
 1. **Kafka Event**: The worker consumes `ProductCreated` message.
 2. **Sync Job Tracking**: Inserts `pending` status record into `search_sync_jobs`.
 3. **Translation**: Invokes translator to translate Name/Description to EN and TH. If it fails, sets status to `failed_translation`.
-4. **AI Search Tags**: Calls OpenAI to generate search tags. If it fails, sets status to `failed_ai`.
-5. **Postgres Save**: Persists translated properties.
-6. **OpenSearch Indexing**: Indexes the product document (with Vietnamese, English, Thai names and AI tags). If it fails, sets status to `failed_opensearch`.
-7. **Complete**: Sets job status to `success` on completion.
+4. **Postgres Save**: Persists translated properties.
+5. **OpenSearch Indexing**: Indexes the product document (with Vietnamese, English, and Thai names). If it fails, sets status to `failed_opensearch`.
+6. **Complete**: Sets job status to `success` on completion.
 
 ### Reprocessor Cron Job
 * A cron job scheduled using `github.com/robfig/cron/v3` runs every minute (default: `*/1 * * * *`).
