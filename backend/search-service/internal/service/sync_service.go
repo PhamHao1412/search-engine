@@ -31,6 +31,7 @@ type GetAISuggestionsParams struct {
 
 type SearchRepository interface {
 	SaveTranslation(ctx context.Context, t *entity.ProductTranslation) error
+	GetTranslationByProductIDAndLang(ctx context.Context, productID, lang string) (*entity.ProductTranslation, error)
 	SaveSyncJob(ctx context.Context, job *entity.SearchSyncJob) error
 	GetSyncJobByProductID(ctx context.Context, productID string) (*entity.SearchSyncJob, error)
 	GetFailedSyncJobs(ctx context.Context) ([]entity.SearchSyncJob, error)
@@ -55,6 +56,7 @@ type SearchRepository interface {
 	DeleteSearchSynonym(ctx context.Context, tenantID, id string) error
 	GetSearchTranslations(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error)
 	GetTopQueries(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error)
+	GetCategoryNameByID(ctx context.Context, id string) (string, error)
 }
 
 // ProductIndexer defines indexing operations for search indexing engine (OpenSearch)
@@ -206,6 +208,15 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 
 	for _, lang := range langs {
 		if lang != origLang {
+			// Check if translation already exists in DB
+			existingTrans, err := s.repo.GetTranslationByProductIDAndLang(ctx, product.ID, lang)
+			if err == nil && existingTrans != nil && existingTrans.NameTranslated != "" {
+				translatedNames[lang] = existingTrans.NameTranslated
+				translatedDescs[lang] = existingTrans.DescriptionTranslated
+				log.Printf("[SyncProduct] Using existing translation from DB for product %s in %s (Skipping Google Translate)\n", product.ID, lang)
+				continue
+			}
+
 			// Translate name
 			nameTrans, err := s.translator.Translate(ctx, product.Name, lang)
 			if err != nil {
@@ -271,10 +282,21 @@ func (s *syncService) SyncProduct(ctx context.Context, product entity.Product) e
 		categoryID = *product.CategoryID
 	}
 
+	categoryName := ""
+	if categoryID != "" {
+		catName, err := s.repo.GetCategoryNameByID(ctx, categoryID)
+		if err == nil {
+			categoryName = catName
+		} else {
+			log.Printf("Warning: Failed to fetch category name for ID %s: %v", categoryID, err)
+		}
+	}
+
 	doc := map[string]interface{}{
 		"id":              product.ID,
 		"tenant_id":       product.TenantID,
 		"category_id":     categoryID,
+		"category_name":   categoryName,
 		"product_name_vi": nameVI,
 		"product_name_en": nameEN,
 		"product_name_th": nameTH,

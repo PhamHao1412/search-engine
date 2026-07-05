@@ -31,6 +31,15 @@ func (r *searchRepository) SaveTranslation(ctx context.Context, t *entity.Produc
 	}).Create(t).Error
 }
 
+func (r *searchRepository) GetTranslationByProductIDAndLang(ctx context.Context, productID, lang string) (*entity.ProductTranslation, error) {
+	var t entity.ProductTranslation
+	err := r.db.WithContext(ctx).Where("product_id = ? AND language_code = ?", productID, lang).First(&t).Error
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
 func (r *searchRepository) SaveSyncJob(ctx context.Context, job *entity.SearchSyncJob) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "product_id"}},
@@ -336,4 +345,15 @@ func (r *searchRepository) GetTopQueries(ctx context.Context, tenantID string, l
 		Limit(limit).
 		Find(&list).Error
 	return list, err
+}
+
+func (r *searchRepository) GetCategoryNameByID(ctx context.Context, id string) (string, error) {
+	var name string
+	err := r.db.WithContext(ctx).Table("product_svc.categories").
+		Select("name").Where("id = ?", id).
+		Row().Scan(&name)
+	if err != nil {
+		return "", err
+	}
+	return name, nil
 }

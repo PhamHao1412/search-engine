@@ -13,31 +13,33 @@ import (
 
 // MockSearchRepository implements service.SearchRepository
 type MockSearchRepository struct {
-	SaveTranslationFn          func(ctx context.Context, t *entity.ProductTranslation) error
-	SaveSyncJobFn              func(ctx context.Context, job *entity.SearchSyncJob) error
-	GetSyncJobByProductIDFn    func(ctx context.Context, productID string) (*entity.SearchSyncJob, error)
-	GetFailedSyncJobsFn        func(ctx context.Context) ([]entity.SearchSyncJob, error)
-	GetProductByIDFn           func(ctx context.Context, id string) (*entity.Product, error)
-	GetAllProductsByTenantIDFn func(ctx context.Context, tenantID string) ([]entity.Product, error)
-	GetSpellcheckRuleFn        func(ctx context.Context, tenantID, typoWord string) (*entity.SpellcheckDictionary, error)
-	GetActiveTenantsFn         func(ctx context.Context) ([]string, error)
-	GetZeroResultQueriesFn     func(ctx context.Context, tenantID string, limit int) ([]service.QueryStat, error)
-	GetLowCTRQueriesFn         func(ctx context.Context, tenantID string, limit int) ([]service.QueryStat, error)
-	SaveAISuggestionFn         func(ctx context.Context, sugg *entity.AISuggestion) error
-	GetAISuggestionByIDFn      func(ctx context.Context, id string) (*entity.AISuggestion, error)
-	UpdateAISuggestionStatusFn func(ctx context.Context, id, status string) error
-	SaveSpellcheckDictionaryFn func(ctx context.Context, entry *entity.SpellcheckDictionary) error
-	SaveSearchSynonymFn        func(ctx context.Context, entry *entity.SearchSynonym) error
-	GetAISuggestionsFn         func(ctx context.Context, params service.GetAISuggestionsParams) ([]entity.AISuggestion, int64, error)
-	ApproveAISuggestionFn      func(ctx context.Context, tenantID, id string) (*entity.AISuggestion, error)
-	GetSpellcheckRulesFn       func(ctx context.Context, tenantID string) ([]entity.SpellcheckDictionary, error)
-	GetSearchSynonymsFn        func(ctx context.Context, tenantID string) ([]entity.SearchSynonym, error)
-	GetTenantContextSummaryFn  func(ctx context.Context, tenantID string) (string, error)
-	GetAllTenantsFn            func(ctx context.Context) ([]entity.Tenant, error)
-	DeleteSpellcheckRuleFn     func(ctx context.Context, tenantID, id string) error
-	DeleteSearchSynonymFn      func(ctx context.Context, tenantID, id string) error
-	GetSearchTranslationsFn    func(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error)
-	GetTopQueriesFn            func(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error)
+	SaveTranslationFn                  func(ctx context.Context, t *entity.ProductTranslation) error
+	GetTranslationByProductIDAndLangFn func(ctx context.Context, productID, lang string) (*entity.ProductTranslation, error)
+	SaveSyncJobFn                      func(ctx context.Context, job *entity.SearchSyncJob) error
+	GetSyncJobByProductIDFn            func(ctx context.Context, productID string) (*entity.SearchSyncJob, error)
+	GetFailedSyncJobsFn                func(ctx context.Context) ([]entity.SearchSyncJob, error)
+	GetProductByIDFn                   func(ctx context.Context, id string) (*entity.Product, error)
+	GetAllProductsByTenantIDFn         func(ctx context.Context, tenantID string) ([]entity.Product, error)
+	GetSpellcheckRuleFn                func(ctx context.Context, tenantID, typoWord string) (*entity.SpellcheckDictionary, error)
+	GetActiveTenantsFn                 func(ctx context.Context) ([]string, error)
+	GetZeroResultQueriesFn             func(ctx context.Context, tenantID string, limit int) ([]service.QueryStat, error)
+	GetLowCTRQueriesFn                 func(ctx context.Context, tenantID string, limit int) ([]service.QueryStat, error)
+	SaveAISuggestionFn                 func(ctx context.Context, sugg *entity.AISuggestion) error
+	GetAISuggestionByIDFn              func(ctx context.Context, id string) (*entity.AISuggestion, error)
+	UpdateAISuggestionStatusFn         func(ctx context.Context, id, status string) error
+	SaveSpellcheckDictionaryFn         func(ctx context.Context, entry *entity.SpellcheckDictionary) error
+	SaveSearchSynonymFn                func(ctx context.Context, entry *entity.SearchSynonym) error
+	GetAISuggestionsFn                 func(ctx context.Context, params service.GetAISuggestionsParams) ([]entity.AISuggestion, int64, error)
+	ApproveAISuggestionFn              func(ctx context.Context, tenantID, id string) (*entity.AISuggestion, error)
+	GetSpellcheckRulesFn               func(ctx context.Context, tenantID string) ([]entity.SpellcheckDictionary, error)
+	GetSearchSynonymsFn                func(ctx context.Context, tenantID string) ([]entity.SearchSynonym, error)
+	GetTenantContextSummaryFn          func(ctx context.Context, tenantID string) (string, error)
+	GetAllTenantsFn                    func(ctx context.Context) ([]entity.Tenant, error)
+	DeleteSpellcheckRuleFn             func(ctx context.Context, tenantID, id string) error
+	DeleteSearchSynonymFn              func(ctx context.Context, tenantID, id string) error
+	GetSearchTranslationsFn            func(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error)
+	GetTopQueriesFn                    func(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error)
+	GetCategoryNameByIDFn              func(ctx context.Context, id string) (string, error)
 
 	SavedJobs         map[string]*entity.SearchSyncJob
 	SavedTranslations []*entity.ProductTranslation
@@ -236,11 +238,25 @@ func (m *MockSearchRepository) GetSearchTranslations(ctx context.Context, tenant
 	return nil, nil
 }
 
-func (m *MockSearchRepository) GetTopQueries(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error) {
-	if m.GetTopQueriesFn != nil {
-		return m.GetTopQueriesFn(ctx, tenantID, limit)
+func (r *MockSearchRepository) GetTopQueries(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error) {
+	if r.GetTopQueriesFn != nil {
+		return r.GetTopQueriesFn(ctx, tenantID, limit)
 	}
 	return nil, nil
+}
+
+func (r *MockSearchRepository) GetTranslationByProductIDAndLang(ctx context.Context, productID, lang string) (*entity.ProductTranslation, error) {
+	if r.GetTranslationByProductIDAndLangFn != nil {
+		return r.GetTranslationByProductIDAndLangFn(ctx, productID, lang)
+	}
+	return nil, nil
+}
+
+func (r *MockSearchRepository) GetCategoryNameByID(ctx context.Context, id string) (string, error) {
+	if r.GetCategoryNameByIDFn != nil {
+		return r.GetCategoryNameByIDFn(ctx, id)
+	}
+	return "Test Category", nil
 }
 
 // MockProductIndexer implements service.ProductIndexer
@@ -444,9 +460,11 @@ func TestSyncProduct_Success(t *testing.T) {
 
 	syncSvc := service.NewSyncService(repo, indexer, cache, translator, tagsGen)
 
+	catID := "category-123"
 	product := entity.Product{
 		ID:               "prod-123",
 		TenantID:         "tenant-abc",
+		CategoryID:       &catID,
 		Name:             "Bàn phím cơ",
 		Description:      "Bàn phím cơ giá rẻ",
 		Price:            50.0,
@@ -477,6 +495,9 @@ func TestSyncProduct_Success(t *testing.T) {
 	}
 	if doc["product_name_en"] != "Bàn phím cơ_en" {
 		t.Errorf("Expected translated EN name, got: %s", doc["product_name_en"])
+	}
+	if doc["category_name"] != "Test Category" {
+		t.Errorf("Expected category_name 'Test Category', got: %v", doc["category_name"])
 	}
 }
 

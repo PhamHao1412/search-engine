@@ -1,6 +1,6 @@
 # US-007 - Ranking Engine
 
-Status: Draft
+Status: Approved
 Priority: High
 Related Requirements:
 * FR-006 Ranking Engine
@@ -21,7 +21,7 @@ Tôi muốn thấy các sản phẩm phù hợp nhất, chất lượng tốt v�
 * Buyer
 
 ## Điều kiện tiên quyết
-* Sản phẩm được lưu trữ trong OpenSearch có đầy đủ các trường dữ liệu: `featured (boolean)`, `inventory (int)`, `price (decimal)`.
+* Sản phẩm được lưu trữ trong OpenSearch có đầy đủ các trường dữ liệu: `featured (boolean)`, `inventory (int)`, `price (decimal)`, `category_name (text)`.
 * Search API hoạt động bình thường.
 
 ## Luồng chính
@@ -29,7 +29,7 @@ Tôi muốn thấy các sản phẩm phù hợp nhất, chất lượng tốt v�
 2. Search API xây dựng câu truy vấn **`function_score`** gửi tới OpenSearch.
 3. Cấu trúc tính điểm tương quan (Scoring Mechanism):
    * **Điểm Cơ Bản (Relevance Score - BM25)**: Tính toán điểm tương quan trên các trường văn bản theo trọng số:
-     `Score_Base = (Name * 5) + (Category * 3) + (Tags * 2.5) + (Description * 1)`
+     `Score_Base = (Name * 5) + (Category Name * 3) + (Description * 1)`
    * **Trọng số Nổi Bật (Featured Product Boost)**: Nếu sản phẩm được đánh dấu `"featured": true`, nhân thêm trọng số tăng điểm (ví dụ: nhân hệ số `1.2` hoặc cộng thêm điểm cố định `+10`).
    * **Trọng số Kho Hàng (Inventory Decay Boost)**: Áp dụng hàm suy hao đối với các sản phẩm hết hàng để đẩy chúng xuống cuối danh sách:
      * Nếu `inventory > 0`: Hệ số nhân là `1.0` (không giảm điểm).
@@ -63,5 +63,5 @@ FE->>Buyer: Hiển thị sản phẩm theo thứ tự tối ưu
 *   **AC-003**: Đảm bảo hiệu năng tính toán. Toàn bộ logic tính điểm, nhân hệ số nổi bật và suy hao kho hàng phải được thực thi trực tiếp bằng engine tìm kiếm của OpenSearch thông qua câu lệnh `function_score` thay vì sắp xếp thủ công bằng Go trong bộ nhớ để đạt độ trễ < 50ms.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Hệ số boost cho Featured Product và hệ số suy hao (decay) cho sản phẩm hết hàng phải được cấu hình động trong config (`configs/config.yaml`) để dễ dàng tinh chỉnh mà không cần sửa code.
+*   **BR-001**: Hệ số boost cho Featured Product và hệ số suy hao (decay) cho sản phẩm hết hàng phải được cấu hình động qua biến môi trường (`.env` / Environment Variables) để dễ dàng tinh chỉnh mà không cần sửa code.
 *   **BR-002**: Điểm số BM25 gốc của từ khóa khớp chính xác (Exact Match) hoặc cụm từ (Phrase Match) phải luôn được ưu tiên hàng đầu trước khi áp dụng các bộ nhân trọng số nghiệp vụ.

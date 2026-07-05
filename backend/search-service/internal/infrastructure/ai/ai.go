@@ -160,41 +160,66 @@ func (gw *aiService) AnalyzeKeywords(ctx context.Context, keywords []string, ten
 
 	url := "https://api.openai.com/v1/chat/completions"
 
-	prompt := fmt.Sprintf(`You are an AI search dictionary optimizer. You are given a list of search queries that failed or had very low engagement in an e-commerce store, along with a context list of products currently sold in the store.
+	prompt := fmt.Sprintf(`You are an AI search dictionary optimizer. You are given a list of search queries that failed or had very low engagement in an e-commerce store, along with a context describing the products, brands, categories, and business domain of the store.
 
 Analyze these queries and suggest corrections: either spelling corrections (typos) or synonyms.
 
-Do not suggest corrections for queries that are correct, ambiguous, or make no sense.
+Do not suggest corrections for queries that are already correct, too ambiguous, unrelated to shopping, or have insufficient evidence.
 
 Guidelines to distinguish "suggestion_type":
 
-* "typo": Use this ONLY when the source query and suggested value are intended to be the exact same word or entity, differing only by spelling mistakes, missing letters, extra letters, character slips, or missing tone marks/accents.
-
-* "synonym": Use this when the source query is an abbreviation, alias, prefix, truncated term, alternative name, translation, or related category term that refers to the same shopping intent. The source and target may be different words or different forms of the same entity.
+* "typo": Use this when the source query and suggested value refer to the same intended entity, differing by spelling mistakes, missing/extra/transposed characters, keyboard slips, missing accents/diacritics, OR multiple compounded character-level errors (e.g. dropped letter + swapped letter). Typos are often heavily distorted — do not require near-identical spelling. Judge by whether a human shopper typing quickly and inaccurately would plausibly produce this string while intending the target entity.
+* "synonym": Use this when the source query is an abbreviation, alias, shortened form, alternative name, translation, common nickname, product family, or related shopping term that refers to the same shopping intent.
 
 Important rules:
 
 1. Tenant Context Priority:
-   Before suggesting any correction, first determine whether the query could refer to a brand, product name, product category, or common shopping term present in the Tenant Context.
+   Before suggesting any correction, first determine whether the query could refer to any shopping-related entity represented by the Tenant Context, including brands, product names, product families, product lines, categories, or common shopping terms.
 
-2. Entity Name Accuracy:
-   When correcting queries that match or resemble brand names, product names, or categories present in the Tenant Context, always suggest the exact full name as written in the context (including its specific casing, capitalization, or camelCase formatting). Avoid correcting these specific names to generic dictionary words.
+2. Canonical Entity Names:
+   When correcting queries that match or closely resemble entities represented in the Tenant Context, always suggest the canonical entity name.
+   If the exact entity is explicitly listed in the Tenant Context, preserve its exact spelling and capitalization.
+   If the exact entity is not explicitly listed but is a well-known product family strongly associated with a supported brand or category in the Tenant Context (e.g. a brand sells phones, and the query resembles a well-known phone model from that brand), you should suggest that canonical product family name. Do not withhold a suggestion merely because the exact product name string is absent from the Tenant Context — brand/category presence is sufficient grounding.
 
 3. Partial Match Handling:
-   Queries may be abbreviations, prefixes, shortened forms, truncated words, or incomplete search terms. Consider these valid signals of user intent when matching against entities in the Tenant Context.
+   Queries may be abbreviations, prefixes, shortened forms, incomplete words, truncated searches, or partially typed entities. Treat these as valid evidence when there is a strong and unambiguous shopping intent.
 
 4. Correction Priority:
-   If multiple corrections are possible, prefer the correction that maps to an entity present in the Tenant Context. If no strong Tenant Context match exists, ignore the query instead of suggesting a generic dictionary correction.
+   If multiple corrections are possible, always prefer the one most closely related to the Tenant Context.
+   If there is no direct Tenant Context match, you may infer a well-known shopping entity only when:
+   - it clearly belongs to a supported brand or category,
+   - the typo similarity is reasonably high (moderate character-level distortion is acceptable, not just single-character edits),
+   - the intended entity is commonly recognized by shoppers,
+   - and there is little ambiguity.
+   Otherwise, ignore the query.
 
 5. Strict Tenant Context Relevance:
-   ABSOLUTELY DO NOT suggest corrections or synonyms for search queries that are unrelated to the store's business domain, categories, brands, or products listed in the Tenant Context. If a search query is completely off-topic, ambiguous, or random text, ignore it and make no suggestion.
+   Do NOT generate suggestions for queries unrelated to the store's business domain.
+   Ignore random words, unrelated brands, unrelated products, meaningless text, or queries whose intended meaning cannot be determined with reasonable confidence.
 
-6. Strong Evidence Requirement:
-   Only generate a suggestion when there is strong evidence that the query refers to a brand, category, product, or shopping term in the Tenant Context. Otherwise, ignore it.
+6. Evidence Requirement:
+   Generate a suggestion whenever there is reasonable evidence that the intended search is a shopping-related entity relevant to the Tenant Context, even if the query is significantly distorted. Only withhold a suggestion when two or more distinct entities are similarly plausible interpretations (genuine ambiguity), or when the query has no plausible connection to the store's domain at all.
 
 7. Existing Term Protection:
-   Do not generate a suggestion if the query already exactly matches a valid brand, category, product, or shopping term in the Tenant Context.
+   Do not generate a suggestion if the query already exactly matches a valid brand, category, product, product family, or shopping term in the Tenant Context.
 
+8. Confidence Score:
+   Use higher confidence when the corrected entity explicitly exists in the Tenant Context.
+   Use moderate confidence when the correction is inferred from a well-known product family associated with a supported brand, or when the query is heavily distorted but the intended entity is still clearly identifiable.
+   Use low confidence only when the evidence is weaker but still sufficiently reliable to be worth surfacing.
+
+9. Output Rules:
+   Always return valid JSON.
+   If no suggestions should be generated, return:
+
+   {
+     "suggestions": []
+   }
+
+Examples (for calibration only, not part of the actual query list):
+- Query "ihpeo" in a store selling Apple products → suggest {"suggestion_type": "typo", "source_value": "ihpeo", "suggested_value": "iPhone", "confidence_score": 0.75, "reason": "Heavily distorted spelling of iPhone, a well-known Apple product family; store sells Apple."}
+- Query "tainghe" in a store with category "Tai nghe" → suggest {"suggestion_type": "typo", "source_value": "tainghe", "suggested_value": "Tai nghe", "confidence_score": 0.9, "reason": "Missing space, matches existing category exactly."}
+- Query "503" or "admin" → no suggestion, not shopping-related.
 
 Failed Search Queries:
 %s
@@ -208,9 +233,9 @@ Each suggestion object must have the following fields:
 
 * "suggestion_type": Either "typo" or "synonym"
 * "source_value": The original search query
-* "suggested_value": The proposed correct search query or synonym
+* "suggested_value": The proposed corrected query or synonym
 * "confidence_score": A decimal number between 0.0 and 1.0 representing your confidence
-* "reason": A short explanation in English of why you made this suggestion
+* "reason": A short explanation in English describing why the suggestion was generated
 `, strings.Join(keywords, ", "), tenantContext)
 
 	reqBody, _ := json.Marshal(map[string]interface{}{

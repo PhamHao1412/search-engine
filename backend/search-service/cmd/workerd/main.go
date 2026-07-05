@@ -67,7 +67,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect opensearch: %v", err)
 	}
-	productIndexer := opensearch.NewOpenSearchIndexer(opensearchClient)
+	productIndexer := opensearch.NewOpenSearchIndexer(
+		opensearchClient,
+		cfg.RankingFeaturedBoost,
+		cfg.RankingInventoryDecay,
+	)
 
 	productIndexer.EnsureIndex(context.Background())
 

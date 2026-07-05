@@ -18,12 +18,18 @@ import (
 )
 
 type opensearchIndexer struct {
-	client *opensearchgo.Client
+	client         *opensearchgo.Client
+	featuredBoost  float64
+	inventoryDecay float64
 }
 
 // NewOpenSearchIndexer creates a new ProductIndexer using OpenSearch
-func NewOpenSearchIndexer(client *opensearchgo.Client) service.ProductIndexer {
-	return &opensearchIndexer{client: client}
+func NewOpenSearchIndexer(client *opensearchgo.Client, featuredBoost, inventoryDecay float64) service.ProductIndexer {
+	return &opensearchIndexer{
+		client:         client,
+		featuredBoost:  featuredBoost,
+		inventoryDecay: inventoryDecay,
+	}
 }
 
 func (idx *opensearchIndexer) IndexProduct(ctx context.Context, doc map[string]interface{}, productID string) error {
@@ -168,6 +174,7 @@ func (idx *opensearchIndexer) EnsureIndex(ctx context.Context) {
 				"id": { "type": "keyword" },
 				"tenant_id": { "type": "keyword" },
 				"category_id": { "type": "keyword" },
+				"category_name": { "type": "text", "analyzer": "vi_ascii_analyzer" },
 				"product_name_vi": { "type": "text", "analyzer": "vi_ascii_analyzer" },
 				"product_name_en": { "type": "text", "analyzer": "english" },
 				"product_name_th": { "type": "text", "analyzer": "thai" },
@@ -232,6 +239,7 @@ func getTargetFields(lang string) []string {
 			"product_name_en^5.0",
 			"product_name_vi^1.5",
 			"product_name_th^1.5",
+			"category_name^3.0",
 			"description_en^1.0",
 			"description_vi^0.5",
 			"description_th^0.5",
@@ -243,6 +251,7 @@ func getTargetFields(lang string) []string {
 			"product_name_th^5.0",
 			"product_name_en^1.5",
 			"product_name_vi^1.5",
+			"category_name^3.0",
 			"description_th^1.0",
 			"description_en^0.5",
 			"description_vi^0.5",
@@ -254,6 +263,7 @@ func getTargetFields(lang string) []string {
 			"product_name_vi^5.0",
 			"product_name_en^1.5",
 			"product_name_th^1.5",
+			"category_name^3.0",
 			"description_vi^1.0",
 			"description_en^0.5",
 			"description_th^0.5",
@@ -404,7 +414,7 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 								"featured": true,
 							},
 						},
-						"weight": 1.2,
+						"weight": idx.featuredBoost,
 					},
 					map[string]interface{}{
 						"filter": map[string]interface{}{
@@ -412,7 +422,7 @@ func (idx *opensearchIndexer) SearchProducts(ctx context.Context, tenantID, quer
 								"inventory": 0,
 							},
 						},
-						"weight": 0.5,
+						"weight": idx.inventoryDecay,
 					},
 				},
 				"score_mode": "multiply",

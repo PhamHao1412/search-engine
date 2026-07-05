@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -24,6 +25,8 @@ type Config struct {
 	GoogleTranslateAPIKey string
 	OpenAIAPIKey          string
 	OpenAIModel           string
+	RankingFeaturedBoost  float64
+	RankingInventoryDecay float64
 }
 
 func LoadConfig() (*Config, error) {
@@ -47,6 +50,8 @@ func LoadConfig() (*Config, error) {
 		GoogleTranslateAPIKey: getEnv("GOOGLE_TRANSLATE_API_KEY", ""),
 		OpenAIAPIKey:          getEnv("OPENAI_API_KEY", ""),
 		OpenAIModel:           getEnv("OPENAI_MODEL", "gpt-4o-mini"),
+		RankingFeaturedBoost:  getEnvFloat("RANKING_FEATURED_BOOST", 1.2),
+		RankingInventoryDecay: getEnvFloat("RANKING_INVENTORY_DECAY", 0.2),
 	}
 
 	return cfg, nil
@@ -55,6 +60,15 @@ func LoadConfig() (*Config, error) {
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if value, exists := os.LookupEnv(key); exists {
+		if f, err := strconv.ParseFloat(value, 64); err == nil {
+			return f
+		}
 	}
 	return fallback
 }
