@@ -1,8 +1,8 @@
-# Amaze Search Engine
+# Swift Search Engine
 
 ## 1. Tổng quan dự án
 
-Amaze Search Engine là hệ thống tìm kiếm sản phẩm thông minh dành cho sàn thương mại điện tử đa ngôn ngữ.
+Swift Search Engine là hệ thống tìm kiếm sản phẩm thông minh dành cho sàn thương mại điện tử đa ngôn ngữ.
 
 Mục tiêu của hệ thống:
 
@@ -233,7 +233,7 @@ Lưu ý:
 ## 7. Cấu trúc repository
 
 ```
-amaze-search-engine/
+swift-search-engine/
 ├── ba/                # Business Analysis (BRD, User Stories, Acceptance Criteria)
 ├── sa/                # Solution Architecture (System Design, ERD, OpenSearch Design)
 ├── backend/           # Mã nguồn backend (Golang)
