@@ -80,7 +80,10 @@ func main() {
 
 	// 4. Init Repositories & Services
 	searchRepo := repository.NewSearchRepository(dbConn)
+	analyticsRepo := repository.NewAnalyticsRepository(dbConn)
+
 	syncSvc := service.NewSyncService(searchRepo, productIndexer, productCache, translator, tagGenerator)
+	analyticsSvc := service.NewAnalyticsService(analyticsRepo)
 
 	analyzer, ok := tagGenerator.(service.KeywordAnalyzer)
 	if !ok {
@@ -88,6 +91,7 @@ func main() {
 	}
 	aiSvc := service.NewAISuggestionService(searchRepo, analyzer)
 	_ = aiSvc
+	_ = analyticsSvc
 
 	// 5. Connect Kafka Consumer (Reader) and DLQ Publisher (Writer)
 	topic := "product-ingestion-events"
@@ -128,6 +132,44 @@ func main() {
 	})
 	if err != nil {
 		log.Fatalf("failed to schedule reprocessor cron job: %v", err)
+	}
+
+	// 8. Start Analytics Aggregator Cron Job
+	analyticsCronSched := os.Getenv("ANALYTICS_CRON")
+	if analyticsCronSched == "" {
+		analyticsCronSched = "0 * * * *" // Hourly
+	}
+	_, err = c.AddFunc(analyticsCronSched, func() {
+		log.Printf("[CronJob] Starting AggregateAnalytics (schedule: %s)...\n", analyticsCronSched)
+		// Aggregate for today
+		if err := analyticsSvc.AggregateAnalytics(ctx, time.Now()); err != nil {
+			log.Printf("[CronJob] Error executing AggregateAnalytics for today: %v\n", err)
+		}
+		// Aggregate for yesterday
+		if err := analyticsSvc.AggregateAnalytics(ctx, time.Now().AddDate(0, 0, -1)); err != nil {
+			log.Printf("[CronJob] Error executing AggregateAnalytics for yesterday: %v\n", err)
+		}
+	})
+	if err != nil {
+		log.Fatalf("failed to schedule analytics cron job: %v", err)
+	}
+
+	// 9. Start Log Retention Cleanup Cron Job
+	cleanupCronSched := os.Getenv("CLEANUP_CRON")
+	if cleanupCronSched == "" {
+		cleanupCronSched = "0 2 * * *" // Daily at 2 AM
+	}
+	_, err = c.AddFunc(cleanupCronSched, func() {
+		log.Printf("[CronJob] Starting DeleteOldRawLogs (schedule: %s)...\n", cleanupCronSched)
+		rowsDeleted, err := analyticsSvc.DeleteOldRawLogs(ctx, 90)
+		if err != nil {
+			log.Printf("[CronJob] Error executing DeleteOldRawLogs: %v\n", err)
+		} else {
+			log.Printf("[CronJob] DeleteOldRawLogs completed successfully. Cleaned up %d raw log entries.\n", rowsDeleted)
+		}
+	})
+	if err != nil {
+		log.Fatalf("failed to schedule cleanup cron job: %v", err)
 	}
 
 	//aiCronSched := os.Getenv("AI_SUGGESTION_CRON")

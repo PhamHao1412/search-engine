@@ -90,10 +90,11 @@ func main() {
 		log.Fatalf("failed to cast tagGenerator to KeywordAnalyzer")
 	}
 	aiSvc := service.NewAISuggestionService(searchRepo, analyzer)
+	analyticsSvc := service.NewAnalyticsService(analyticsRepo)
 
 	searchSvc := service.NewSearchService(productIndexer, productCache, analyticsRepo, searchRepo)
 	searchHandler := v1.NewSearchHandler(searchSvc, syncSvc)
-	adminHandler := v1.NewAdminHandler(searchRepo, productCache, aiSvc)
+	adminHandler := v1.NewAdminHandler(searchRepo, productCache, aiSvc, analyticsSvc)
 
 	log.Printf("Initialized backend services: Database: %T, RedisCache: %T, OpenSearchIndexer: %T, AnalyticsRepository: %T, SyncService: %T\n", searchRepo, productCache, productIndexer, analyticsRepo, syncSvc)
 

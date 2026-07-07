@@ -260,7 +260,76 @@ export interface AISuggestion {
   created_at: string;
 }
 
+export interface AnalyticsSummary {
+  total_searches: number;
+  zero_result_searches: number;
+  ctr: number;
+  avg_click_position: number;
+  spellcheck_rules_count: number;
+  synonym_rules_count: number;
+}
+
+export interface ZeroResultQueryDetail {
+  query: string;
+  search_count: number;
+  ai_suggestion_status: string;
+}
+
+export interface CategoryAnalyticsDetail {
+  category_id: string;
+  category_name: string;
+  search_count: number;
+  click_count: number;
+  ctr: number;
+}
+
+export interface AnalyticsSummaryResponse {
+  summary: AnalyticsSummary;
+  zero_results: ZeroResultQueryDetail[];
+  category_analytics: CategoryAnalyticsDetail[];
+}
+
 export const adminApi = {
+  async getAnalyticsSummary(tenantId: string, range = '30days'): Promise<AnalyticsSummaryResponse> {
+    const params = new URLSearchParams({ range });
+    const response = await fetch(`${BASE_URL}/admin/analytics/summary?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch analytics summary: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async triggerAnalyticsAggregation(tenantId: string, startDate?: string, endDate?: string): Promise<{ message: string }> {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    const url = params.toString() ? `${BASE_URL}/admin/analytics/trigger?${params.toString()}` : `${BASE_URL}/admin/analytics/trigger`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to trigger analytics aggregation: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
   async getTenants(): Promise<Array<{ id: string; name: string }>> {
     const response = await fetch(`${BASE_URL}/admin/tenants`, {
       method: 'GET',

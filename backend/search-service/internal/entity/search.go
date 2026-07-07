@@ -83,6 +83,68 @@ func (ClickLog) TableName() string {
 	return "search_svc.click_logs"
 }
 
+type DailyQueryAnalytics struct {
+	ID               string    `gorm:"type:uuid;primaryKey" json:"id"`
+	TenantID         string    `gorm:"type:uuid;not null" json:"tenant_id"`
+	Query            string    `gorm:"type:varchar(255);not null" json:"query"`
+	Date             time.Time `gorm:"type:date;not null" json:"date"`
+	SearchCount      int       `gorm:"type:integer;not null;default:0" json:"search_count"`
+	ClickCount       int       `gorm:"type:integer;not null;default:0" json:"click_count"`
+	ZeroResultCount  int       `gorm:"type:integer;not null;default:0" json:"zero_result_count"`
+	SumClickPosition int       `gorm:"type:integer;not null;default:0" json:"sum_click_position"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+func (DailyQueryAnalytics) TableName() string {
+	return "search_svc.daily_query_analytics"
+}
+
+type DailyCategoryAnalytics struct {
+	ID           string    `gorm:"type:uuid;primaryKey" json:"id"`
+	TenantID     string    `gorm:"type:uuid;not null" json:"tenant_id"`
+	CategoryID   string    `gorm:"type:uuid;not null" json:"category_id"`
+	CategoryName string    `gorm:"type:varchar(255);not null" json:"category_name"`
+	Date         time.Time `gorm:"type:date;not null" json:"date"`
+	SearchCount  int       `gorm:"type:integer;not null;default:0" json:"search_count"`
+	ClickCount   int       `gorm:"type:integer;not null;default:0" json:"click_count"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func (DailyCategoryAnalytics) TableName() string {
+	return "search_svc.daily_category_analytics"
+}
+
+type ClickLogWithCategory struct {
+	TenantID     string `json:"tenant_id"`
+	Query        string `json:"query"`
+	CategoryID   string `json:"category_id"`
+	CategoryName string `json:"category_name"`
+	ClickCount   int    `json:"click_count"`
+}
+
+type AnalyticsSummary struct {
+	TotalSearches      int `json:"total_searches"`
+	ZeroResultSearches int `json:"zero_result_searches"`
+	ClickCount         int `json:"click_count"`
+	SumClickPosition   int `json:"sum_click_position"`
+}
+
+type ZeroResultQueryDetail struct {
+	Query              string `json:"query"`
+	SearchCount        int    `json:"search_count"`
+	AISuggestionStatus string `json:"ai_suggestion_status"`
+}
+
+type CategoryAnalyticsDetail struct {
+	CategoryID   string  `json:"category_id"`
+	CategoryName string  `json:"category_name"`
+	SearchCount  int     `json:"search_count"`
+	ClickCount   int     `json:"click_count"`
+	CTR          float64 `json:"ctr"`
+}
+
 type SpellcheckDictionary struct {
 	ID          string    `gorm:"type:uuid;primaryKey" json:"id"`
 	TenantID    string    `gorm:"type:uuid;not null" json:"tenant_id"`

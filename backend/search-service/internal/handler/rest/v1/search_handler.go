@@ -141,7 +141,7 @@ func (h *SearchHandler) Suggest(c *gin.Context) {
 }
 
 type ClickTrackRequest struct {
-	SearchLogID string `json:"search_log_id" binding:"required"`
+	SearchLogID string `json:"search_log_id"` // Optional for autocomplete click
 	ProductID   string `json:"product_id" binding:"required"`
 	Query       string `json:"query" binding:"required"`
 	Position    int    `json:"position" binding:"required"`

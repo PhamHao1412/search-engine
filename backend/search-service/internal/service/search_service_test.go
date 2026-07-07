@@ -32,6 +32,40 @@ func (m *MockAnalyticsRepository) SaveClickLog(ctx context.Context, searchLogID,
 	return nil
 }
 
+func (m *MockAnalyticsRepository) GetRawSearchLogs(ctx context.Context, start, end time.Time) ([]entity.SearchLog, error) {
+	return nil, nil
+}
+func (m *MockAnalyticsRepository) GetRawClickLogs(ctx context.Context, start, end time.Time) ([]entity.ClickLog, error) {
+	return nil, nil
+}
+func (m *MockAnalyticsRepository) GetClickLogsWithProductInfo(ctx context.Context, start, end time.Time) ([]entity.ClickLogWithCategory, error) {
+	return nil, nil
+}
+func (m *MockAnalyticsRepository) SaveDailyQueryAnalytics(ctx context.Context, records []entity.DailyQueryAnalytics) error {
+	return nil
+}
+func (m *MockAnalyticsRepository) SaveDailyCategoryAnalytics(ctx context.Context, records []entity.DailyCategoryAnalytics) error {
+	return nil
+}
+func (m *MockAnalyticsRepository) GetAnalyticsSummary(ctx context.Context, tenantID string, start, end time.Time) (entity.AnalyticsSummary, error) {
+	return entity.AnalyticsSummary{}, nil
+}
+func (m *MockAnalyticsRepository) GetZeroResultQueries(ctx context.Context, tenantID string, start, end time.Time, limit int) ([]entity.ZeroResultQueryDetail, error) {
+	return nil, nil
+}
+func (m *MockAnalyticsRepository) GetCategoryAnalytics(ctx context.Context, tenantID string, start, end time.Time) ([]entity.CategoryAnalyticsDetail, error) {
+	return nil, nil
+}
+func (m *MockAnalyticsRepository) GetSpellcheckRulesCount(ctx context.Context, tenantID string) (int, error) {
+	return 0, nil
+}
+func (m *MockAnalyticsRepository) GetSynonymRulesCount(ctx context.Context, tenantID string) (int, error) {
+	return 0, nil
+}
+func (m *MockAnalyticsRepository) DeleteRawLogsOlderThan(ctx context.Context, before time.Time) (int64, error) {
+	return 0, nil
+}
+
 func TestSearchService_CacheHit(t *testing.T) {
 	indexer := NewMockProductIndexer()
 	cache := &MockProductCache{}

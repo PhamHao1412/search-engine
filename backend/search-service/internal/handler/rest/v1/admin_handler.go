@@ -15,17 +15,92 @@ import (
 )
 
 type AdminHandler struct {
-	repo  service.SearchRepository
-	cache service.ProductCache
-	aiSvc service.AISuggestionService
+	repo         service.SearchRepository
+	cache        service.ProductCache
+	aiSvc        service.AISuggestionService
+	analyticsSvc service.AnalyticsService
 }
 
-func NewAdminHandler(repo service.SearchRepository, cache service.ProductCache, aiSvc service.AISuggestionService) *AdminHandler {
+func NewAdminHandler(repo service.SearchRepository, cache service.ProductCache, aiSvc service.AISuggestionService, analyticsSvc service.AnalyticsService) *AdminHandler {
 	return &AdminHandler{
-		repo:  repo,
-		cache: cache,
-		aiSvc: aiSvc,
+		repo:         repo,
+		cache:        cache,
+		aiSvc:        aiSvc,
+		analyticsSvc: analyticsSvc,
 	}
+}
+
+func (h *AdminHandler) GetAnalyticsSummary(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	rangeFilter := c.DefaultQuery("range", "30days")
+	if rangeFilter != "today" && rangeFilter != "7days" && rangeFilter != "30days" {
+		rangeFilter = "30days"
+	}
+
+	summary, err := h.analyticsSvc.GetAnalyticsSummary(c.Request.Context(), tenantID, rangeFilter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get analytics summary: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, summary)
+}
+
+func (h *AdminHandler) TriggerAnalyticsAggregation(c *gin.Context) {
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+
+	if startDateStr != "" || endDateStr != "" {
+		if startDateStr == "" || endDateStr == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Both start_date and end_date are required when specifying a range"})
+			return
+		}
+
+		// Parse dates in YYYY-MM-DD format
+		start, err := time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start_date format, must be YYYY-MM-DD"})
+			return
+		}
+		end, err := time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid end_date format, must be YYYY-MM-DD"})
+			return
+		}
+
+		if end.Before(start) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "end_date cannot be before start_date"})
+			return
+		}
+
+		// Run aggregation day by day in range [start, end]
+		curr := start
+		for !curr.After(end) {
+			if err := h.analyticsSvc.AggregateAnalytics(c.Request.Context(), curr); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to run analytics aggregation for %s: %v", curr.Format("2006-01-02"), err)})
+				return
+			}
+			curr = curr.AddDate(0, 0, 1)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf("Analytics aggregation completed successfully from %s to %s", startDateStr, endDateStr),
+		})
+		return
+	}
+
+	// Default aggregation: yesterday and today
+	if err := h.analyticsSvc.TriggerAggregation(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to run analytics aggregation: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Analytics aggregation triggered successfully"})
 }
 
 func (h *AdminHandler) GetAISuggestions(c *gin.Context) {

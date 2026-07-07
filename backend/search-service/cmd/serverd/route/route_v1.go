@@ -20,6 +20,8 @@ func V1Router(r *gin.Engine, searchHandler *v1.SearchHandler, adminHandler *v1.A
 	})
 
 	apiV1.GET("/admin/tenants", adminHandler.GetTenants)
+	apiV1.GET("/admin/analytics/summary", adminHandler.GetAnalyticsSummary)
+	apiV1.POST("/admin/analytics/trigger", adminHandler.TriggerAnalyticsAggregation)
 	apiV1.GET("/admin/ai/suggestions", adminHandler.GetAISuggestions)
 	apiV1.POST("/admin/ai/suggestions/:id/approve", adminHandler.ApproveAISuggestion)
 	apiV1.POST("/admin/ai/suggestions/:id/reject", adminHandler.RejectAISuggestion)

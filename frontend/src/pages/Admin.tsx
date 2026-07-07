@@ -16,7 +16,6 @@ import {
   Search,
   TrendingUp,
   AlertCircle,
-  HelpCircle,
   Plus,
   X
 } from 'lucide-react';
@@ -38,8 +37,18 @@ const Admin: React.FC = () => {
   const { activeTenant, setActiveTenantById, tenants } = useTenant();
 
   // Navigation & Layout states
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai-suggestions' | 'dictionaries' | 'sync'>('ai-suggestions');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai-suggestions' | 'dictionaries' | 'sync'>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Search Analytics Dashboard states
+  const [analyticsSummary, setAnalyticsSummary] = useState<any>(null);
+  const [zeroResultQueries, setZeroResultQueries] = useState<any[]>([]);
+  const [categoryAnalytics, setCategoryAnalytics] = useState<any[]>([]);
+  const [analyticsRange, setAnalyticsRange] = useState<string>('30days');
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [triggeringAnalytics, setTriggeringAnalytics] = useState(false);
+  const [triggerStartDate, setTriggerStartDate] = useState('');
+  const [triggerEndDate, setTriggerEndDate] = useState('');
 
   // Sync state
   const [syncing, setSyncing] = useState(false);
@@ -206,6 +215,39 @@ const Admin: React.FC = () => {
     }
   };
 
+  const fetchAnalyticsSummary = async () => {
+    setLoadingAnalytics(true);
+    try {
+      const res = await adminApi.getAnalyticsSummary(activeTenant.id, analyticsRange);
+      setAnalyticsSummary(res.summary);
+      setZeroResultQueries(res.zero_results || []);
+      setCategoryAnalytics(res.category_analytics || []);
+    } catch (e) {
+      console.error('Failed to fetch analytics summary', e);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  const handleTriggerAggregation = async () => {
+    setTriggeringAnalytics(true);
+    try {
+      if ((triggerStartDate && !triggerEndDate) || (!triggerStartDate && triggerEndDate)) {
+        alert('Vui lòng nhập cả Ngày bắt đầu và Ngày kết thúc');
+        setTriggeringAnalytics(false);
+        return;
+      }
+      const res = await adminApi.triggerAnalyticsAggregation(activeTenant.id, triggerStartDate, triggerEndDate);
+      alert(res.message || 'Đã chạy tổng hợp dữ liệu phân tích thành công!');
+      fetchAnalyticsSummary();
+    } catch (e) {
+      console.error('Failed to trigger aggregation', e);
+      alert('Chạy tổng hợp dữ liệu thất bại: ' + e);
+    } finally {
+      setTriggeringAnalytics(false);
+    }
+  };
+
   // Fetch data on active tenant, status, search keyword, or page index changes (Backend-driven)
   useEffect(() => {
     fetchTypoSuggestions();
@@ -218,6 +260,12 @@ const Admin: React.FC = () => {
   useEffect(() => {
     fetchDictionaries();
   }, [activeTenant.id]);
+
+  useEffect(() => {
+    if (activeTab === 'dashboard') {
+      fetchAnalyticsSummary();
+    }
+  }, [activeTenant.id, analyticsRange, activeTab]);
 
   const handleApproveSuggestion = async (id: string, type: 'typo' | 'synonym') => {
     try {
@@ -427,157 +475,223 @@ const Admin: React.FC = () => {
 
         {/* BODY */}
         <main className="admin-body">
-          {/* TAB 1: DASHBOARD (MOCK/PLACEHOLDER FOR US-009) */}
+          {/* TAB 1: DASHBOARD (DYNAMIC US-009) */}
           {activeTab === 'dashboard' && (
             <div>
-              {/* Premium metrics grid */}
-              <div className="metrics-grid">
-                <div className="metric-card">
-                  <div className="metric-card-bg-gradient" />
-                  <div className="metric-card-header">
-                    <span className="metric-card-title">Tổng số tìm kiếm</span>
-                    <div className="metric-card-icon">
-                      <TrendingUp size={18} />
-                    </div>
-                  </div>
-                  <div className="metric-card-value">1,482</div>
-                  <div className="metric-card-sub">Lượt tìm kiếm trong 30 ngày qua</div>
+              {/* Range Filter & Trigger aggregation buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: 'auto' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Tổng hợp:</span>
+                  <input 
+                    type="date" 
+                    value={triggerStartDate}
+                    onChange={(e) => setTriggerStartDate(e.target.value)}
+                    className="btn btn-outline"
+                    style={{ padding: '4px 8px', fontSize: '0.8rem', height: '32px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                  />
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>đến</span>
+                  <input 
+                    type="date" 
+                    value={triggerEndDate}
+                    onChange={(e) => setTriggerEndDate(e.target.value)}
+                    className="btn btn-outline"
+                    style={{ padding: '4px 8px', fontSize: '0.8rem', height: '32px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                  />
+                  <button 
+                    onClick={handleTriggerAggregation} 
+                    disabled={triggeringAnalytics}
+                    className="btn btn-outline"
+                    style={{ 
+                      padding: '6px 16px', 
+                      fontSize: '0.85rem', 
+                      fontWeight: 600, 
+                      height: '36px',
+                      borderColor: 'var(--primary)',
+                      color: 'var(--primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <RefreshCw size={14} className={triggeringAnalytics ? 'spin' : ''} />
+                    {triggeringAnalytics ? 'Đang tổng hợp...' : 'Chạy Tổng hợp'}
+                  </button>
                 </div>
-
-                <div className="metric-card">
-                  <div className="metric-card-bg-gradient" />
-                  <div className="metric-card-header">
-                    <span className="metric-card-title">Tìm kiếm lỗi (0 kết quả)</span>
-                    <div className="metric-card-icon" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' }}>
-                      <AlertCircle size={18} />
-                    </div>
-                  </div>
-                  <div className="metric-card-value">42</div>
-                  <div className="metric-card-sub">Cần AI phân tích tối ưu hóa</div>
-                </div>
-
-                <div className="metric-card">
-                  <div className="metric-card-bg-gradient" />
-                  <div className="metric-card-header">
-                    <span className="metric-card-title">Tỷ lệ CTR Tìm kiếm</span>
-                    <div className="metric-card-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
-                      <CheckCircle2 size={18} />
-                    </div>
-                  </div>
-                  <div className="metric-card-value">76.4%</div>
-                  <div className="metric-card-sub">+3.2% so với tháng trước</div>
-                </div>
-
-                <div className="metric-card">
-                  <div className="metric-card-bg-gradient" />
-                  <div className="metric-card-header">
-                    <span className="metric-card-title">Cấu hình Từ khóa</span>
-                    <div className="metric-card-icon" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary)' }}>
-                      <BookOpen size={18} />
-                    </div>
-                  </div>
-                  <div className="metric-card-value">{spellcheckRules.length + synonymRules.length}</div>
-                  <div className="metric-card-sub">{spellcheckRules.length} sửa lỗi, {synonymRules.length} đồng nghĩa</div>
-                </div>
+                <button 
+                  onClick={() => setAnalyticsRange('today')} 
+                  className={`btn ${analyticsRange === 'today' ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ padding: '6px 16px', fontSize: '0.85rem', fontWeight: 600, height: '36px' }}
+                >
+                  Hôm nay
+                </button>
+                <button 
+                  onClick={() => setAnalyticsRange('7days')} 
+                  className={`btn ${analyticsRange === '7days' ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ padding: '6px 16px', fontSize: '0.85rem', fontWeight: 600, height: '36px' }}
+                >
+                  7 ngày qua
+                </button>
+                <button 
+                  onClick={() => setAnalyticsRange('30days')} 
+                  className={`btn ${analyticsRange === '30days' ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ padding: '6px 16px', fontSize: '0.85rem', fontWeight: 600, height: '36px' }}
+                >
+                  30 ngày qua
+                </button>
               </div>
 
-              {/* Layout for analytics tables */}
-              <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                <section className="admin-card">
-                  <div className="admin-card-title">
-                    <AlertCircle size={18} style={{ color: 'var(--danger)' }} />
-                    <span>Top Từ khóa 0 kết quả (Zero Results)</span>
-                  </div>
-                  <div className="table-wrapper">
-                    <table className="admin-table">
-                      <thead>
-                        <tr>
-                          <th>Từ khóa</th>
-                          <th>Số lần tìm</th>
-                          <th>Trạng thái đề xuất</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td style={{ fontWeight: 600 }}>stel</td>
-                          <td>14</td>
-                          <td><span className="badge-status" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>Đã gợi ý sửa đổi</span></td>
-                        </tr>
-                        <tr>
-                          <td style={{ fontWeight: 600 }}>chuot gaming</td>
-                          <td>12</td>
-                          <td><span className="badge-status" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>Đã gợi ý sửa đổi</span></td>
-                        </tr>
-                        <tr>
-                          <td style={{ fontWeight: 600 }}>keycron</td>
-                          <td>9</td>
-                          <td><span className="badge-status" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>Chờ AI quét</span></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-
-                <section className="admin-card">
-                  <div className="admin-card-title">
-                    <TrendingUp size={18} style={{ color: 'var(--primary)' }} />
-                    <span>Lượt tìm kiếm phổ biến theo danh mục</span>
-                  </div>
-                  <div className="table-wrapper">
-                    <table className="admin-table">
-                      <thead>
-                        <tr>
-                          <th>Danh mục</th>
-                          <th>Số lượt tìm</th>
-                          <th>Tỷ lệ Click (CTR)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td style={{ fontWeight: 600 }}>Bàn phím cơ</td>
-                          <td>642</td>
-                          <td>82.1%</td>
-                        </tr>
-                        <tr>
-                          <td style={{ fontWeight: 600 }}>Chuột Gaming</td>
-                          <td>412</td>
-                          <td>74.6%</td>
-                        </tr>
-                        <tr>
-                          <td style={{ fontWeight: 600 }}>Tai nghe</td>
-                          <td>198</td>
-                          <td>68.9%</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              </div>
-
-              {/* US-009 information alert */}
-              <div 
-                style={{ 
-                  marginTop: '24px', 
-                  padding: '16px', 
-                  borderRadius: '8px', 
-                  border: '1px solid var(--border-color)', 
-                  backgroundColor: 'var(--bg-primary)', 
-                  display: 'flex', 
-                  gap: '12px', 
-                  alignItems: 'center' 
-                }}
-              >
-                <HelpCircle size={24} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                <div>
-                  <h4 style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '2px' }}>
-                    Dashboard Analytics (US-009)
-                  </h4>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Màn hình này đang hiển thị số liệu phân tích mẫu. Tính năng liên kết trực tiếp biểu đồ thời gian thực với dữ liệu từ ElasticSearch/OpenSearch clicklogs sẽ được hoàn thiện trong US-009.
-                  </p>
+              {loadingAnalytics ? (
+                <div style={{ padding: '80px 0', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <div className="spinner" style={{ margin: '0 auto 16px auto', width: '40px', height: '40px', border: '3px solid rgba(37, 99, 235, 0.1)', borderTop: '3px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  <span>Đang tải dữ liệu phân tích...</span>
                 </div>
-              </div>
-            </div>
+              ) : (
+                <>
+                  {/* Premium metrics grid */}
+                  <div className="metrics-grid">
+                    <div className="metric-card">
+                      <div className="metric-card-bg-gradient" />
+                      <div className="metric-card-header">
+                        <span className="metric-card-title">Tổng số tìm kiếm</span>
+                        <div className="metric-card-icon">
+                          <TrendingUp size={18} />
+                        </div>
+                      </div>
+                      <div className="metric-card-value">
+                        {analyticsSummary ? analyticsSummary.total_searches.toLocaleString() : 0}
+                      </div>
+                      <div className="metric-card-sub">
+                        Lượt tìm kiếm trong {analyticsRange === 'today' ? 'hôm nay' : analyticsRange === '7days' ? '7 ngày qua' : '30 ngày qua'}
+                      </div>
+                    </div>
+
+                    <div className="metric-card">
+                      <div className="metric-card-bg-gradient" />
+                      <div className="metric-card-header">
+                        <span className="metric-card-title">Tìm kiếm lỗi (0 kết quả)</span>
+                        <div className="metric-card-icon" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' }}>
+                          <AlertCircle size={18} />
+                        </div>
+                      </div>
+                      <div className="metric-card-value">
+                        {analyticsSummary ? analyticsSummary.zero_result_searches.toLocaleString() : 0}
+                      </div>
+                      <div className="metric-card-sub">Cần AI phân tích tối ưu hóa</div>
+                    </div>
+
+                    <div className="metric-card">
+                      <div className="metric-card-bg-gradient" />
+                      <div className="metric-card-header">
+                        <span className="metric-card-title">Tỷ lệ CTR Tìm kiếm</span>
+                        <div className="metric-card-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
+                          <CheckCircle2 size={18} />
+                        </div>
+                      </div>
+                      <div className="metric-card-value">
+                        {analyticsSummary ? `${analyticsSummary.ctr}%` : '0%'}
+                      </div>
+                      <div className="metric-card-sub">
+                        Vị trí click TB: {analyticsSummary ? analyticsSummary.avg_click_position : 0}
+                      </div>
+                    </div>
+
+                    <div className="metric-card">
+                      <div className="metric-card-bg-gradient" />
+                      <div className="metric-card-header">
+                        <span className="metric-card-title">Cấu hình Từ khóa</span>
+                        <div className="metric-card-icon" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary)' }}>
+                          <BookOpen size={18} />
+                        </div>
+                      </div>
+                      <div className="metric-card-value">{spellcheckRules.length + synonymRules.length}</div>
+                      <div className="metric-card-sub">{spellcheckRules.length} sửa lỗi, {synonymRules.length} đồng nghĩa</div>
+                    </div>
+                  </div>
+
+                  {/* Layout for analytics tables */}
+                  <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                    <section className="admin-card">
+                      <div className="admin-card-title">
+                        <AlertCircle size={18} style={{ color: 'var(--danger)' }} />
+                        <span>Top Từ khóa 0 kết quả (Zero Results)</span>
+                      </div>
+                      <div className="table-wrapper">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Từ khóa</th>
+                              <th>Số lần tìm</th>
+                              <th>Trạng thái đề xuất</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {zeroResultQueries.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>
+                                  Chưa có dữ liệu tìm kiếm lỗi
+                                </td>
+                              </tr>
+                            ) : (
+                              zeroResultQueries.map((zq, idx) => (
+                                <tr key={idx}>
+                                  <td style={{ fontWeight: 600 }}>{zq.query}</td>
+                                  <td>{zq.search_count}</td>
+                                  <td>
+                                    <span 
+                                      className="badge-status" 
+                                      style={{ 
+                                        backgroundColor: zq.ai_suggestion_status === 'Đã gợi ý sửa đổi' ? 'var(--success-light)' : zq.ai_suggestion_status === 'Chờ duyệt' ? '#fef3c7' : '#e5e7eb', 
+                                        color: zq.ai_suggestion_status === 'Đã gợi ý sửa đổi' ? 'var(--success)' : zq.ai_suggestion_status === 'Chờ duyệt' ? '#92400e' : 'var(--text-secondary)' 
+                                      }}
+                                    >
+                                      {zq.ai_suggestion_status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+
+                    <section className="admin-card">
+                      <div className="admin-card-title">
+                        <TrendingUp size={18} style={{ color: 'var(--primary)' }} />
+                        <span>Lượt tìm kiếm phổ biến theo danh mục</span>
+                      </div>
+                      <div className="table-wrapper">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Danh mục</th>
+                              <th>Số lượt tìm</th>
+                              <th>Tỷ lệ Click (CTR)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {categoryAnalytics.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>
+                                  Chưa có dữ liệu danh mục sản phẩm
+                                </td>
+                              </tr>
+                            ) : (
+                              categoryAnalytics.map((cat, idx) => (
+                                <tr key={idx}>
+                                  <td style={{ fontWeight: 600 }}>{cat.category_name}</td>
+                                  <td>{cat.search_count.toLocaleString()}</td>
+                                  <td>{cat.ctr}%</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  </div>
+                </>
+              )}            </div>
           )}
 
           {/* TAB 2: AI SUGGESTIONS ENGINE (BACKEND PAGINATED, FILTERED, SEARCHED) */}

@@ -21,6 +21,21 @@ type SearchService interface {
 type AnalyticsRepository interface {
 	SaveSearchLog(ctx context.Context, searchLogID, tenantID, query, normalizedQuery string, resultCount int) error
 	SaveClickLog(ctx context.Context, searchLogID, tenantID, query, productID string, position int) error
+
+	// Pre-aggregated analytics jobs
+	GetRawSearchLogs(ctx context.Context, start, end time.Time) ([]entity.SearchLog, error)
+	GetRawClickLogs(ctx context.Context, start, end time.Time) ([]entity.ClickLog, error)
+	GetClickLogsWithProductInfo(ctx context.Context, start, end time.Time) ([]entity.ClickLogWithCategory, error)
+	SaveDailyQueryAnalytics(ctx context.Context, records []entity.DailyQueryAnalytics) error
+	SaveDailyCategoryAnalytics(ctx context.Context, records []entity.DailyCategoryAnalytics) error
+
+	// Query summary dashboard data
+	GetAnalyticsSummary(ctx context.Context, tenantID string, start, end time.Time) (entity.AnalyticsSummary, error)
+	GetZeroResultQueries(ctx context.Context, tenantID string, start, end time.Time, limit int) ([]entity.ZeroResultQueryDetail, error)
+	GetCategoryAnalytics(ctx context.Context, tenantID string, start, end time.Time) ([]entity.CategoryAnalyticsDetail, error)
+	GetSpellcheckRulesCount(ctx context.Context, tenantID string) (int, error)
+	GetSynonymRulesCount(ctx context.Context, tenantID string) (int, error)
+	DeleteRawLogsOlderThan(ctx context.Context, before time.Time) (int64, error)
 }
 
 type searchService struct {
@@ -130,7 +145,20 @@ func (s *searchService) TrackClick(ctx context.Context, tenantID, searchLogID, p
 	if position <= 0 {
 		return fmt.Errorf("click position must be greater than 0")
 	}
-	return s.analytics.SaveClickLog(ctx, searchLogID, tenantID, query, productID, position)
+
+	actualSearchLogID := searchLogID
+	if actualSearchLogID == "" {
+		// Generate virtual search log for autocomplete click
+		actualSearchLogID = s.newUUID()
+		normalized := strings.ToLower(strings.Join(strings.Fields(query), " "))
+		// Save virtual search log with result_count = 1
+		if err := s.analytics.SaveSearchLog(ctx, actualSearchLogID, tenantID, query, normalized, 1); err != nil {
+			log.Printf("Warning: failed to save virtual search log for autocomplete click: %v", err)
+			// Still proceed to save click log even if search log save failed, to preserve conversion metrics
+		}
+	}
+
+	return s.analytics.SaveClickLog(ctx, actualSearchLogID, tenantID, query, productID, position)
 }
 
 func (s *searchService) Suggest(ctx context.Context, tenantID, query, lang string) ([]entity.Suggestion, error) {

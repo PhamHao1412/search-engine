@@ -222,9 +222,19 @@ const Storefront: React.FC = () => {
     setSearchParams({ q: query.trim() });
   };
 
-  const handleSuggestionClick = (suggestion: Suggestion) => {
+  const handleSuggestionClick = (suggestion: Suggestion, index: number) => {
     setQuery(suggestion.text);
     setShowSuggestions(false);
+
+    // Track click from autocomplete (virtual search log is created by backend)
+    const clickPayload = {
+      search_log_id: '',
+      product_id: suggestion.id,
+      query: query.trim() || suggestion.text,
+      position: index >= 0 ? index + 1 : 1, // 1-indexed position
+    };
+    searchApi.trackClick(clickPayload, activeTenant.id);
+
     navigate(`/products/${suggestion.id}`);
   };
 
@@ -247,7 +257,7 @@ const Storefront: React.FC = () => {
     } else if (e.key === 'Enter') {
       if (activeIndex >= 0 && activeIndex < suggestions.length) {
         e.preventDefault();
-        handleSuggestionClick(suggestions[activeIndex]);
+        handleSuggestionClick(suggestions[activeIndex], activeIndex);
       }
     } else if (e.key === 'Escape') {
       setShowSuggestions(false);
@@ -389,7 +399,7 @@ const Storefront: React.FC = () => {
                   return (
                     <div
                       key={suggestion.id || index}
-                      onClick={() => handleSuggestionClick(suggestion)}
+                      onClick={() => handleSuggestionClick(suggestion, index)}
                       className="autocomplete-row-item"
                       style={{
                         display: 'flex',
