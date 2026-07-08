@@ -17,10 +17,13 @@ import {
   TrendingUp,
   AlertCircle,
   Plus,
-  X
+  X,
+  Bot,
+  Trash2,
+  MessageSquare
 } from 'lucide-react';
 import { useTenant } from '../context/TenantContext';
-import { searchApi, adminApi, AISuggestion } from '../services/api';
+import { searchApi, adminApi, AISuggestion, ProposedAction, Conversation } from '../services/api';
 import Footer from '../components/Footer';
 
 interface SyncLog {
@@ -32,12 +35,20 @@ interface SyncLog {
   errorMessage?: string;
 }
 
+interface ChatMessageItem {
+  id?: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  proposed_actions?: ProposedAction[];
+  action_states?: Record<string, string>;
+}
+
 const Admin: React.FC = () => {
   const navigate = useNavigate();
   const { activeTenant, setActiveTenantById, tenants } = useTenant();
 
   // Navigation & Layout states
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai-suggestions' | 'dictionaries' | 'sync'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai-suggestions' | 'dictionaries' | 'sync' | 'ai-assistant'>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Search Analytics Dashboard states
@@ -86,6 +97,242 @@ const Admin: React.FC = () => {
   const [newTypoWord, setNewTypoWord] = useState('');
   const [newCorrectWord, setNewCorrectWord] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+
+  // AI Assistant states
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [sendingChat, setSendingChat] = useState(false);
+
+  const fetchConversations = async () => {
+    setLoadingConversations(true);
+    try {
+      const list = await adminApi.getConversations(activeTenant.id);
+      setConversations(list);
+      if (list.length > 0) {
+        setActiveConversation(list[0]);
+      } else {
+        setActiveConversation(null);
+        setChatMessages([
+          {
+            role: 'assistant',
+            content: 'Xin chào! Tôi là Trợ lý AI của Swift Search Engine. Tôi có thể giúp bạn tra cứu nhanh sản phẩm trong kho hoặc đề xuất điều chỉnh từ điển tìm kiếm (synonym, sửa lỗi chính tả). Bạn cần trợ giúp gì hôm nay?'
+          }
+        ]);
+      }
+    } catch (err: any) {
+      console.error("Failed to load conversations:", err);
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchConversations();
+  }, [activeTenant.id]);
+
+  useEffect(() => {
+    if (!activeConversation) return;
+
+    const loadMessages = async () => {
+      try {
+        const msgs = await adminApi.getConversationMessages(activeTenant.id, activeConversation.id);
+        if (msgs.length > 0) {
+          setChatMessages(msgs.map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            proposed_actions: m.proposed_actions,
+            action_states: m.action_states
+          })));
+        } else {
+          setChatMessages([
+            {
+              role: 'assistant',
+              content: 'Cuộc hội thoại trống. Bạn có thể bắt đầu nhắn tin ngay.'
+            }
+          ]);
+        }
+      } catch (err: any) {
+        console.error("Failed to load messages:", err);
+        setChatMessages([
+          {
+            role: 'assistant',
+            content: `Không thể tải lịch sử tin nhắn: ${err.message}`
+          }
+        ]);
+      }
+    };
+
+    loadMessages();
+  }, [activeConversation, activeTenant.id]);
+
+  const handleNewConversation = async () => {
+    try {
+      const newConv = await adminApi.createConversation(activeTenant.id);
+      setConversations(prev => [newConv, ...prev]);
+      setActiveConversation(newConv);
+      setChatMessages([
+        {
+          role: 'assistant',
+          content: 'Cuộc hội thoại mới đã được tạo. Tôi có thể giúp gì cho bạn?'
+        }
+      ]);
+    } catch (err: any) {
+      alert(`Không thể tạo cuộc hội thoại mới: ${err.message}`);
+    }
+  };
+
+  const handleDeleteConversation = async (e: React.MouseEvent, convId: string) => {
+    e.stopPropagation();
+    if (!window.confirm("Bạn có chắc chắn muốn xóa cuộc hội thoại này?")) return;
+
+    try {
+      await adminApi.deleteConversation(activeTenant.id, convId);
+      setConversations(prev => prev.filter(c => c.id !== convId));
+      if (activeConversation?.id === convId) {
+        setActiveConversation(null);
+        setChatMessages([
+          {
+            role: 'assistant',
+            content: 'Xin chào! Tôi là Trợ lý AI của Swift Search Engine. Tôi có thể giúp bạn tra cứu nhanh sản phẩm trong kho hoặc đề xuất điều chỉnh từ điển tìm kiếm (synonym, sửa lỗi chính tả). Bạn cần trợ giúp gì hôm nay?'
+          }
+        ]);
+      }
+    } catch (err: any) {
+      alert(`Không thể xóa cuộc hội thoại: ${err.message}`);
+    }
+  };
+
+  const handleSendChat = async (e?: React.FormEvent, customMsg?: string) => {
+    if (e) e.preventDefault();
+    const msgToSend = (customMsg || chatInput).trim();
+    if (!msgToSend || sendingChat) return;
+
+    if (!customMsg) {
+      setChatInput('');
+    }
+
+    setSendingChat(true);
+    let currentConv = activeConversation;
+
+    try {
+      if (!currentConv) {
+        currentConv = await adminApi.createConversation(activeTenant.id, msgToSend.substring(0, 40));
+        setConversations(prev => [currentConv!, ...prev]);
+        setActiveConversation(currentConv);
+      }
+
+      const newUserMsg: ChatMessageItem = {
+        role: 'user',
+        content: msgToSend
+      };
+
+      const prevMsgs = chatMessages.filter(
+        m => !m.content.startsWith("Xin chào! Tôi là Trợ lý") && !m.content.startsWith("Cuộc hội thoại")
+      );
+      const updatedMessages = [...prevMsgs, newUserMsg];
+      setChatMessages(updatedMessages);
+
+      const res = await adminApi.chatWithAssistant(activeTenant.id, currentConv.id, msgToSend);
+
+      const newAssistantMsg: ChatMessageItem = {
+        id: res.message_id,
+        role: 'assistant',
+        content: res.reply,
+        proposed_actions: res.proposed_actions || [],
+        action_states: {}
+      };
+
+      setChatMessages([...updatedMessages, newAssistantMsg]);
+
+      if (prevMsgs.length === 0) {
+        const updatedList = await adminApi.getConversations(activeTenant.id);
+        setConversations(updatedList);
+        const match = updatedList.find(c => c.id === currentConv?.id);
+        if (match) {
+          setActiveConversation(match);
+        }
+      }
+    } catch (err: any) {
+      const errorMsg: ChatMessageItem = {
+        role: 'assistant',
+        content: `Rất tiếc, đã xảy ra lỗi khi kết nối với máy chủ AI: ${err.message || 'Lỗi không xác định'}`
+      };
+      setChatMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setSendingChat(false);
+    }
+  };
+
+  const handleApproveAction = async (msgIndex: number, actionIndex: number, action: ProposedAction) => {
+    const msg = chatMessages[msgIndex];
+    if (!msg.id) return;
+    if (msg.action_states && msg.action_states[String(actionIndex)] === 'accepted') return;
+
+    try {
+      if (action.action_type === 'create_synonym') {
+        const { keyword, synonym, is_bidirectional } = action.params;
+        await adminApi.addSynonym(activeTenant.id, keyword, synonym, is_bidirectional);
+      } else if (action.action_type === 'create_spellcheck') {
+        const { typo_word, correct_word } = action.params;
+        await adminApi.addSpellcheck(activeTenant.id, typo_word, correct_word);
+      } else if (action.action_type === 'delete_synonym') {
+        const { ids } = action.params;
+        for (const id of ids) {
+          await adminApi.deleteSynonym(activeTenant.id, id);
+        }
+      } else if (action.action_type === 'delete_spellcheck') {
+        const { ids } = action.params;
+        for (const id of ids) {
+          await adminApi.deleteSpellcheck(activeTenant.id, id);
+        }
+      }
+
+      await adminApi.updateActionState(activeTenant.id, msg.id, actionIndex, 'accepted');
+
+      const copy = [...chatMessages];
+      if (!copy[msgIndex].action_states) copy[msgIndex].action_states = {};
+      copy[msgIndex].action_states![String(actionIndex)] = 'accepted';
+      
+      const systemMessage: ChatMessageItem = {
+        role: 'system',
+        content: `Đã áp dụng thành công: ${action.description}`
+      };
+      
+      const newMessages = [...copy, systemMessage];
+      setChatMessages(newMessages);
+
+      fetchDictionaries();
+    } catch (err: any) {
+      alert(`Không thể thực thi hành động: ${err.message || 'Lỗi hệ thống'}`);
+    }
+  };
+
+  const handleRejectAction = async (msgIndex: number, actionIndex: number, action: ProposedAction) => {
+    const msg = chatMessages[msgIndex];
+    if (!msg.id) return;
+
+    try {
+      await adminApi.updateActionState(activeTenant.id, msg.id, actionIndex, 'rejected');
+
+      const copy = [...chatMessages];
+      if (!copy[msgIndex].action_states) copy[msgIndex].action_states = {};
+      copy[msgIndex].action_states![String(actionIndex)] = 'rejected';
+
+      const systemMessage: ChatMessageItem = {
+        role: 'system',
+        content: `Đã từ chối hành động: ${action.description}`
+      };
+
+      const newMessages = [...copy, systemMessage];
+      setChatMessages(newMessages);
+    } catch (err: any) {
+      alert(`Không thể từ chối hành động: ${err.message || 'Lỗi hệ thống'}`);
+    }
+  };
 
   const handleAddRule = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -427,6 +674,14 @@ const Admin: React.FC = () => {
             <RefreshCw size={20} />
             <span className="admin-menu-text">Đồng bộ dữ liệu</span>
           </button>
+
+          <button 
+            onClick={() => setActiveTab('ai-assistant')} 
+            className={`admin-menu-item ${activeTab === 'ai-assistant' ? 'active' : ''}`}
+          >
+            <Bot size={20} />
+            <span className="admin-menu-text">Trợ lý AI</span>
+          </button>
         </nav>
 
         <div style={{ marginTop: 'auto', padding: '16px' }} className="admin-menu-text">
@@ -451,6 +706,7 @@ const Admin: React.FC = () => {
               {activeTab === 'ai-suggestions' && 'AI Suggestion Engine'}
               {activeTab === 'dictionaries' && 'Active Search Dictionaries'}
               {activeTab === 'sync' && 'Database Sync Controls'}
+              {activeTab === 'ai-assistant' && 'AI Assistant Chat'}
             </h2>
           </div>
 
@@ -1213,6 +1469,195 @@ const Admin: React.FC = () => {
                     </table>
                   </div>
                 </section>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: AI ASSISTANT */}
+          {activeTab === 'ai-assistant' && (
+            <div className="assistant-chat-container">
+              {/* Sidebar: Conversations Drawer */}
+              <div className="assistant-sidebar">
+                <div className="sidebar-header">
+                  <button 
+                    onClick={handleNewConversation}
+                    className="btn btn-primary"
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.8rem', height: '36px' }}
+                  >
+                    <Plus size={16} />
+                    Hội thoại mới
+                  </button>
+                </div>
+                
+                <div className="conversations-scroll">
+                  {loadingConversations ? (
+                    <div style={{ padding: '20px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Đang tải...
+                    </div>
+                  ) : conversations.length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      Chưa có hội thoại nào.
+                    </div>
+                  ) : (
+                    conversations.map(conv => (
+                      <div 
+                        key={conv.id}
+                        onClick={() => setActiveConversation(conv)}
+                        className={`conversation-item ${activeConversation?.id === conv.id ? 'active' : ''}`}
+                      >
+                        <MessageSquare size={14} style={{ flexShrink: 0 }} />
+                        <span className="conversation-title">{conv.title}</span>
+                        <button 
+                          onClick={(e) => handleDeleteConversation(e, conv.id)}
+                          className="conversation-delete-btn"
+                          title="Xóa hội thoại"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Main chat column */}
+              <div className="assistant-main-chat">
+                {/* Chat Header */}
+                <div className="chat-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)', padding: '8px', borderRadius: '50%', display: 'flex' }}>
+                      <Bot size={18} />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {activeConversation ? activeConversation.title : 'Trợ lý AI SwiftSearch'}
+                      </h3>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        Tra cứu sản phẩm và tạo đề xuất cấu hình từ điển bằng tiếng Việt.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Chat Message Box */}
+                <div className="chat-messages-list">
+                  {chatMessages.map((msg, msgIdx) => (
+                    <div 
+                      key={msgIdx} 
+                      className={`chat-message-bubble ${msg.role}`}
+                    >
+                      {/* Render message content */}
+                      <div style={{ whiteSpace: 'pre-wrap' }}>
+                        {msg.content}
+                      </div>
+
+                      {/* Render proposed actions if assistant bubble contains any */}
+                      {msg.role === 'assistant' && msg.proposed_actions && msg.proposed_actions.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px', width: '100%' }}>
+                          {msg.proposed_actions.map((act, actIdx) => {
+                            const actionState = msg.action_states?.[String(actIdx)] || 'pending';
+                            return (
+                              <div key={actIdx} className="proposed-action-card">
+                                <div className="proposed-action-header">
+                                  <Sparkles size={14} />
+                                  <span>ĐỀ XUẤT CỦA AI TRỢ LÝ</span>
+                                </div>
+                                <div className="proposed-action-desc">
+                                  {act.description}
+                                </div>
+                                <div className="proposed-action-details">
+                                  {JSON.stringify(act.params, null, 2)}
+                                </div>
+                                <div className="proposed-action-actions">
+                                  {actionState === 'pending' ? (
+                                    <>
+                                      <button 
+                                        onClick={() => handleApproveAction(msgIdx, actIdx, act)}
+                                        className="action-btn-approve"
+                                      >
+                                        Chấp nhận
+                                      </button>
+                                      <button 
+                                        onClick={() => handleRejectAction(msgIdx, actIdx, act)}
+                                        className="action-btn-reject"
+                                      >
+                                        Từ chối
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <div className={`action-card-status ${actionState}`}>
+                                      {actionState === 'accepted' ? '✓ ĐÃ ÁP DỤNG THÀNH CÔNG' : '✗ ĐÃ TỪ CHỐI'}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Typing Indicator */}
+                  {sendingChat && (
+                    <div className="chat-message-bubble assistant">
+                      <div className="assistant-typing">
+                        <div className="typing-dot" />
+                        <div className="typing-dot" />
+                        <div className="typing-dot" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chat Input form and Quick prompts */}
+                <div className="chat-input-area">
+                  <div className="quick-prompts-container">
+                    <button 
+                      onClick={() => handleSendChat(undefined, "Bàn phím cơ Akko còn bao nhiêu cái trong kho?")}
+                      className="quick-prompt-btn"
+                    >
+                      🔍 Check bàn phím Akko
+                    </button>
+                    <button 
+                      onClick={() => handleSendChat(undefined, "Tìm các sản phẩm thương hiệu Logitech")}
+                      className="quick-prompt-btn"
+                    >
+                      🔍 Check sản phẩm Logitech
+                    </button>
+                    <button 
+                      onClick={() => handleSendChat(undefined, "Thêm từ đồng nghĩa của bàn phím cơ là phím cơ")}
+                      className="quick-prompt-btn"
+                    >
+                      ➕ Thêm từ đồng nghĩa: bàn phím cơ {"<->"} phím cơ
+                    </button>
+                    <button 
+                      onClick={() => handleSendChat(undefined, "Tạo luật sửa lỗi chính tả gõ sai ipone thành iPhone")}
+                      className="quick-prompt-btn"
+                    >
+                      ✏️ Sửa chính tả: ipone {"->"} iPhone
+                    </button>
+                  </div>
+                  
+                  <form onSubmit={handleSendChat} className="chat-input-form">
+                    <input 
+                      type="text"
+                      placeholder="Gõ tin nhắn hỏi đáp sản phẩm hoặc yêu cầu cấu hình từ điển..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      disabled={sendingChat}
+                      className="chat-input-field"
+                    />
+                    <button 
+                      type="submit" 
+                      disabled={sendingChat || !chatInput.trim()}
+                      className="btn btn-primary"
+                      style={{ height: '42px', padding: '0 24px', fontWeight: 600 }}
+                    >
+                      Gửi
+                    </button>
+                  </form>
+                </div>
               </div>
             </div>
           )}

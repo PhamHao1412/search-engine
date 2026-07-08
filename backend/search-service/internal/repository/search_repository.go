@@ -357,3 +357,76 @@ func (r *searchRepository) GetCategoryNameByID(ctx context.Context, id string) (
 	}
 	return name, nil
 }
+
+func (r *searchRepository) GetConversations(ctx context.Context, tenantID string) ([]entity.AssistantConversation, error) {
+	var list []entity.AssistantConversation
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ?", tenantID).
+		Order("updated_at DESC").
+		Find(&list).Error
+	return list, err
+}
+
+func (r *searchRepository) CreateConversation(ctx context.Context, conv *entity.AssistantConversation) error {
+	now := time.Now()
+	conv.CreatedAt = now
+	conv.UpdatedAt = now
+	return r.db.WithContext(ctx).Create(conv).Error
+}
+
+func (r *searchRepository) GetConversationByID(ctx context.Context, id string) (*entity.AssistantConversation, error) {
+	var conv entity.AssistantConversation
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&conv).Error
+	if err != nil {
+		return nil, err
+	}
+	return &conv, nil
+}
+
+func (r *searchRepository) UpdateConversationTitle(ctx context.Context, id, title string) error {
+	return r.db.WithContext(ctx).Model(&entity.AssistantConversation{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"title":      title,
+			"updated_at": time.Now(),
+		}).Error
+}
+
+func (r *searchRepository) DeleteConversation(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&entity.AssistantConversation{}).Error
+}
+
+func (r *searchRepository) GetConversationMessages(ctx context.Context, convID string) ([]entity.AssistantMessage, error) {
+	var list []entity.AssistantMessage
+	err := r.db.WithContext(ctx).
+		Where("conversation_id = ?", convID).
+		Order("created_at ASC").
+		Find(&list).Error
+	return list, err
+}
+
+func (r *searchRepository) SaveAssistantMessage(ctx context.Context, msg *entity.AssistantMessage) error {
+	msg.CreatedAt = time.Now()
+	err := r.db.WithContext(ctx).Create(msg).Error
+	if err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Model(&entity.AssistantConversation{}).
+		Where("id = ?", msg.ConversationID).
+		Update("updated_at", time.Now()).Error
+}
+
+func (r *searchRepository) UpdateMessageActionStates(ctx context.Context, msgID, statesJSON string) error {
+	return r.db.WithContext(ctx).Model(&entity.AssistantMessage{}).
+		Where("id = ?", msgID).
+		Update("action_states", statesJSON).Error
+}
+
+func (r *searchRepository) GetAssistantMessageByID(ctx context.Context, id string) (*entity.AssistantMessage, error) {
+	var msg entity.AssistantMessage
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&msg).Error
+	if err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}

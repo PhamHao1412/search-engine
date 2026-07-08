@@ -40,6 +40,15 @@ type MockSearchRepository struct {
 	GetSearchTranslationsFn            func(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error)
 	GetTopQueriesFn                    func(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error)
 	GetCategoryNameByIDFn              func(ctx context.Context, id string) (string, error)
+	GetConversationsFn                 func(ctx context.Context, tenantID string) ([]entity.AssistantConversation, error)
+	CreateConversationFn               func(ctx context.Context, conv *entity.AssistantConversation) error
+	GetConversationByIDFn              func(ctx context.Context, id string) (*entity.AssistantConversation, error)
+	UpdateConversationTitleFn          func(ctx context.Context, id, title string) error
+	DeleteConversationFn               func(ctx context.Context, id string) error
+	GetConversationMessagesFn          func(ctx context.Context, convID string) ([]entity.AssistantMessage, error)
+	SaveAssistantMessageFn             func(ctx context.Context, msg *entity.AssistantMessage) error
+	UpdateMessageActionStatesFn        func(ctx context.Context, msgID, statesJSON string) error
+	GetAssistantMessageByIDFn          func(ctx context.Context, id string) (*entity.AssistantMessage, error)
 
 	SavedJobs         map[string]*entity.SearchSyncJob
 	SavedTranslations []*entity.ProductTranslation
@@ -257,6 +266,69 @@ func (r *MockSearchRepository) GetCategoryNameByID(ctx context.Context, id strin
 		return r.GetCategoryNameByIDFn(ctx, id)
 	}
 	return "Test Category", nil
+}
+
+func (m *MockSearchRepository) GetConversations(ctx context.Context, tenantID string) ([]entity.AssistantConversation, error) {
+	if m.GetConversationsFn != nil {
+		return m.GetConversationsFn(ctx, tenantID)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) CreateConversation(ctx context.Context, conv *entity.AssistantConversation) error {
+	if m.CreateConversationFn != nil {
+		return m.CreateConversationFn(ctx, conv)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) GetConversationByID(ctx context.Context, id string) (*entity.AssistantConversation, error) {
+	if m.GetConversationByIDFn != nil {
+		return m.GetConversationByIDFn(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) UpdateConversationTitle(ctx context.Context, id, title string) error {
+	if m.UpdateConversationTitleFn != nil {
+		return m.UpdateConversationTitleFn(ctx, id, title)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) DeleteConversation(ctx context.Context, id string) error {
+	if m.DeleteConversationFn != nil {
+		return m.DeleteConversationFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) GetConversationMessages(ctx context.Context, convID string) ([]entity.AssistantMessage, error) {
+	if m.GetConversationMessagesFn != nil {
+		return m.GetConversationMessagesFn(ctx, convID)
+	}
+	return nil, nil
+}
+
+func (m *MockSearchRepository) SaveAssistantMessage(ctx context.Context, msg *entity.AssistantMessage) error {
+	if m.SaveAssistantMessageFn != nil {
+		return m.SaveAssistantMessageFn(ctx, msg)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) UpdateMessageActionStates(ctx context.Context, msgID, statesJSON string) error {
+	if m.UpdateMessageActionStatesFn != nil {
+		return m.UpdateMessageActionStatesFn(ctx, msgID, statesJSON)
+	}
+	return nil
+}
+
+func (m *MockSearchRepository) GetAssistantMessageByID(ctx context.Context, id string) (*entity.AssistantMessage, error) {
+	if m.GetAssistantMessageByIDFn != nil {
+		return m.GetAssistantMessageByIDFn(ctx, id)
+	}
+	return nil, nil
 }
 
 // MockProductIndexer implements service.ProductIndexer

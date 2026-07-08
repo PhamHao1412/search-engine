@@ -535,4 +535,131 @@ export const adminApi = {
       throw new Error(`Failed to delete spellcheck rule: ${response.status}`);
     }
   },
+
+  async chatWithAssistant(
+    tenantId: string,
+    conversationId: string,
+    message: string
+  ): Promise<{ reply: string; proposed_actions?: ProposedAction[]; message_id: string }> {
+    const response = await fetch(`${BASE_URL}/admin/assistant/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+      body: JSON.stringify({ conversation_id: conversationId, message }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Failed to chat with assistant: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async getConversations(tenantId: string): Promise<Conversation[]> {
+    const response = await fetch(`${BASE_URL}/admin/assistant/conversations`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch conversations: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.conversations || [];
+  },
+
+  async createConversation(tenantId: string, title?: string): Promise<Conversation> {
+    const response = await fetch(`${BASE_URL}/admin/assistant/conversations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+      body: JSON.stringify({ title }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to create conversation: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  async getConversationMessages(tenantId: string, conversationId: string): Promise<ChatMessage[]> {
+    const response = await fetch(`${BASE_URL}/admin/assistant/conversations/${conversationId}/messages`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch conversation messages: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.messages || [];
+  },
+
+  async deleteConversation(tenantId: string, conversationId: string): Promise<void> {
+    const response = await fetch(`${BASE_URL}/admin/assistant/conversations/${conversationId}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to delete conversation: ${response.status}`);
+    }
+  },
+
+  async updateActionState(
+    tenantId: string,
+    messageId: string,
+    actionIndex: number,
+    state: 'accepted' | 'rejected'
+  ): Promise<void> {
+    const response = await fetch(`${BASE_URL}/admin/assistant/messages/${messageId}/action`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Tenant-ID': tenantId,
+      },
+      body: JSON.stringify({ action_index: actionIndex, state }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to update action state: ${response.status}`);
+    }
+  },
 };
+
+export interface Conversation {
+  id: string;
+  tenant_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessage {
+  id?: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  proposed_actions?: ProposedAction[];
+  action_states?: Record<string, string>;
+  created_at?: string;
+}
+
+export interface ProposedAction {
+  action_type: 'create_synonym' | 'delete_synonym' | 'create_spellcheck' | 'delete_spellcheck';
+  description: string;
+  params: any;
+}
+
+

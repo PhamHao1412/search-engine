@@ -19,14 +19,16 @@ type AdminHandler struct {
 	cache        service.ProductCache
 	aiSvc        service.AISuggestionService
 	analyticsSvc service.AnalyticsService
+	assistantSvc service.AssistantService
 }
 
-func NewAdminHandler(repo service.SearchRepository, cache service.ProductCache, aiSvc service.AISuggestionService, analyticsSvc service.AnalyticsService) *AdminHandler {
+func NewAdminHandler(repo service.SearchRepository, cache service.ProductCache, aiSvc service.AISuggestionService, analyticsSvc service.AnalyticsService, assistantSvc service.AssistantService) *AdminHandler {
 	return &AdminHandler{
 		repo:         repo,
 		cache:        cache,
 		aiSvc:        aiSvc,
 		analyticsSvc: analyticsSvc,
+		assistantSvc: assistantSvc,
 	}
 }
 
@@ -458,4 +460,139 @@ func (h *AdminHandler) newUUID() string {
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
+
+func (h *AdminHandler) ChatWithAssistant(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	type ChatRequest struct {
+		ConversationID string `json:"conversation_id" binding:"required"`
+		Message        string `json:"message" binding:"required"`
+	}
+
+	var req ChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	reply, proposedActions, assistantMsgID, err := h.assistantSvc.ChatWithAssistant(c.Request.Context(), tenantID, req.ConversationID, req.Message)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get assistant response: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"reply":            reply,
+		"proposed_actions": proposedActions,
+		"message_id":       assistantMsgID,
+	})
+}
+
+func (h *AdminHandler) ListConversations(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	convs, err := h.assistantSvc.GetConversations(c.Request.Context(), tenantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"conversations": convs,
+	})
+}
+
+func (h *AdminHandler) CreateConversation(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	type CreateRequest struct {
+		Title string `json:"title"`
+	}
+	var req CreateRequest
+	_ = c.ShouldBindJSON(&req)
+
+	conv, err := h.assistantSvc.CreateConversation(c.Request.Context(), tenantID, req.Title)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, conv)
+}
+
+func (h *AdminHandler) GetConversationMessages(c *gin.Context) {
+	convID := c.Param("id")
+	if convID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "conversation_id param is required"})
+		return
+	}
+
+	messages, err := h.assistantSvc.GetConversationMessages(c.Request.Context(), convID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"messages": messages,
+	})
+}
+
+func (h *AdminHandler) DeleteConversation(c *gin.Context) {
+	convID := c.Param("id")
+	if convID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "conversation_id param is required"})
+		return
+	}
+
+	if err := h.assistantSvc.DeleteConversation(c.Request.Context(), convID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+	})
+}
+
+func (h *AdminHandler) UpdateActionState(c *gin.Context) {
+	msgID := c.Param("id")
+	if msgID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message_id param is required"})
+		return
+	}
+
+	type ActionStateRequest struct {
+		ActionIndex int    `json:"action_index"`
+		State       string `json:"state" binding:"required"`
+	}
+
+	var req ActionStateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.assistantSvc.UpdateActionState(c.Request.Context(), msgID, req.ActionIndex, req.State)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+	})
 }

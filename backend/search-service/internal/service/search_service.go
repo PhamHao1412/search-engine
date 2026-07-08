@@ -110,8 +110,6 @@ func (s *searchService) Search(ctx context.Context, tenantID, query, lang string
 
 	// Expand search query with synonyms
 	synonymSegments := s.ExpandQuery(searchQuery, synonyms)
-	log.Printf("[DEBUG Search] tenantID: %s, searchQuery: %q, loaded synonyms/translations count: %d, synonymSegments: %+v",
-		tenantID, searchQuery, len(synonyms), synonymSegments)
 
 	products, total, opensearchSuggest, err := s.indexer.SearchProducts(ctx, tenantID, searchQuery, synonymSegments, lang, from, size)
 	if err != nil {

@@ -57,6 +57,17 @@ type SearchRepository interface {
 	GetSearchTranslations(ctx context.Context, tenantID string) ([]entity.SearchTranslation, error)
 	GetTopQueries(ctx context.Context, tenantID string, limit int) ([]entity.SearchLog, error)
 	GetCategoryNameByID(ctx context.Context, id string) (string, error)
+
+	// Persistent Assistant Conversation methods
+	GetConversations(ctx context.Context, tenantID string) ([]entity.AssistantConversation, error)
+	CreateConversation(ctx context.Context, conv *entity.AssistantConversation) error
+	GetConversationByID(ctx context.Context, id string) (*entity.AssistantConversation, error)
+	UpdateConversationTitle(ctx context.Context, id, title string) error
+	DeleteConversation(ctx context.Context, id string) error
+	GetConversationMessages(ctx context.Context, convID string) ([]entity.AssistantMessage, error)
+	SaveAssistantMessage(ctx context.Context, msg *entity.AssistantMessage) error
+	UpdateMessageActionStates(ctx context.Context, msgID, statesJSON string) error
+	GetAssistantMessageByID(ctx context.Context, id string) (*entity.AssistantMessage, error)
 }
 
 // ProductIndexer defines indexing operations for search indexing engine (OpenSearch)

@@ -91,10 +91,11 @@ func main() {
 	}
 	aiSvc := service.NewAISuggestionService(searchRepo, analyzer)
 	analyticsSvc := service.NewAnalyticsService(analyticsRepo)
+	assistantSvc := service.NewAssistantService(searchRepo, cfg.OpenAIAPIKey, cfg.OpenAIModel)
 
 	searchSvc := service.NewSearchService(productIndexer, productCache, analyticsRepo, searchRepo)
 	searchHandler := v1.NewSearchHandler(searchSvc, syncSvc)
-	adminHandler := v1.NewAdminHandler(searchRepo, productCache, aiSvc, analyticsSvc)
+	adminHandler := v1.NewAdminHandler(searchRepo, productCache, aiSvc, analyticsSvc, assistantSvc)
 
 	log.Printf("Initialized backend services: Database: %T, RedisCache: %T, OpenSearchIndexer: %T, AnalyticsRepository: %T, SyncService: %T\n", searchRepo, productCache, productIndexer, analyticsRepo, syncSvc)
 

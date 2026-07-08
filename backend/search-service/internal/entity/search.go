@@ -238,3 +238,44 @@ type SearchTranslation struct {
 func (SearchTranslation) TableName() string {
 	return "search_svc.search_translations"
 }
+
+type ChatMessage struct {
+	Role            string            `json:"role"`
+	Content         string            `json:"content"`
+	ProposedActions []ProposedAction  `json:"proposed_actions,omitempty"`
+	ActionStates    map[string]string `json:"action_states,omitempty"`
+	ID              string            `json:"id,omitempty"`
+	CreatedAt       time.Time         `json:"created_at,omitempty"`
+}
+
+type ProposedAction struct {
+	ActionType  string                 `json:"action_type"`
+	Description string                 `json:"description"`
+	Params      map[string]interface{} `json:"params"`
+}
+
+type AssistantConversation struct {
+	ID        string    `gorm:"primaryKey;column:id" json:"id"`
+	TenantID  string    `gorm:"column:tenant_id" json:"tenant_id"`
+	Title     string    `gorm:"column:title" json:"title"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (AssistantConversation) TableName() string {
+	return "search_svc.assistant_conversations"
+}
+
+type AssistantMessage struct {
+	ID              string    `gorm:"primaryKey;column:id" json:"id"`
+	ConversationID  string    `gorm:"column:conversation_id" json:"conversation_id"`
+	Role            string    `gorm:"column:role" json:"role"`
+	Content         string    `gorm:"column:content" json:"content"`
+	ProposedActions string    `gorm:"column:proposed_actions" json:"proposed_actions,omitempty"`
+	ActionStates    string    `gorm:"column:action_states" json:"action_states,omitempty"`
+	CreatedAt       time.Time `gorm:"column:created_at" json:"created_at"`
+}
+
+func (AssistantMessage) TableName() string {
+	return "search_svc.assistant_messages"
+}
