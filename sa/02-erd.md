@@ -172,6 +172,34 @@ Lưu vết trạng thái đồng bộ dữ liệu sản phẩm từ Postgres san
 
 ---
 
+### 2.8 assistant_conversations
+Bảng lưu trữ thông tin các phiên hội thoại của Admin với Trợ lý AI.
+
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| **id** | varchar(36) | Primary Key | ID định danh duy nhất của cuộc hội thoại (UUID) |
+| **tenant_id** | varchar(100) | Not Null, Index | Thuộc về tenant nào |
+| **title** | varchar(255) | Not Null | Tiêu đề cuộc hội thoại (tự động lấy từ tin nhắn đầu tiên) |
+| **created_at**| timestamp | Not Null, Default CURRENT_TIMESTAMP | Thời điểm tạo |
+| **updated_at**| timestamp | Not Null, Default CURRENT_TIMESTAMP | Thời điểm cập nhật |
+
+---
+
+### 2.9 assistant_messages
+Bảng lưu trữ chi tiết các tin nhắn trong từng cuộc hội thoại, bao gồm cả các proposed actions do AI gợi ý và trạng thái phê duyệt.
+
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| **id** | varchar(36) | Primary Key | ID định danh duy nhất của tin nhắn (UUID) |
+| **conversation_id** | varchar(36) | Not Null, FK (assistant_conversations) ON DELETE CASCADE | Thuộc về cuộc hội thoại nào |
+| **role** | varchar(50) | Not Null | Vai trò gửi tin nhắn (user, assistant, system) |
+| **content** | text | Not Null | Nội dung tin nhắn văn bản |
+| **proposed_actions** | text | Nullable | Chuỗi JSON chứa các đề xuất thay đổi từ điển (Synonym, Spellcheck) |
+| **action_states** | text | Nullable | Chuỗi JSON lưu trữ trạng thái phê duyệt của từng đề xuất (accepted/rejected) |
+| **created_at**| timestamp | Not Null, Default CURRENT_TIMESTAMP | Thời điểm tạo |
+
+---
+
 # Mối quan hệ giữa các bảng (Relations)
 
 ```mermaid
@@ -185,6 +213,9 @@ erDiagram
     tenants ||--o{ click_logs : "tenant_id"
     tenants ||--o{ ai_suggestions : "tenant_id"
     tenants ||--o{ search_sync_jobs : "tenant_id"
+    tenants ||--o{ assistant_conversations : "tenant_id"
+
+    assistant_conversations ||--o{ assistant_messages : "conversation_id"
 
     products ||--o{ product_translations : "product_id"
     products ||--o{ click_logs : "product_id"
@@ -195,3 +226,4 @@ erDiagram
 ```
 * Bảng `categories` có thể quan hệ 1:N với bảng `products` qua trường `category_id`.
 * Bảng `search_logs` là nguồn đầu vào dữ liệu thô, được batch job offline phân tích và gọi OpenAI API để sinh ra các bản ghi tương ứng trong `ai_suggestions`.
+

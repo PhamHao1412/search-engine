@@ -77,5 +77,5 @@ FE->>Buyer: Hiển thị giao diện kết quả kèm thông báo sửa lỗi
 *   **AC-003**: Sử dụng cơ chế Multi-Search để gộp chung yêu cầu Spellcheck và Search vào một request mạng duy nhất tới OpenSearch, đảm bảo latency tìm kiếm tổng thể không tăng quá 10ms.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Từ điển sửa lỗi chính tả cục bộ phải được đồng bộ vào Redis Cache từ PostgreSQL của đúng tenant đó để tối ưu hóa hiệu năng tầng kiểm duyệt 1.
-*   **BR-002**: Chỉ tự động sửa từ khóa nếu độ tin cậy của gợi ý (suggester confidence score) đạt trên ngưỡng quy định (ví dụ: `confidence > 0.8`).
+* Tham chiếu các quy tắc từ [BR-201 và BR-202](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#b-spellcheck-s%E1%BB%AFa-l%E1%BB%97i-ch%C3%ADnh-t%E1%BA%A3) trong tài liệu BRD.
+

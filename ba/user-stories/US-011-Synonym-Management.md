@@ -67,5 +67,5 @@ UI->>Admin: Hiển thị thông báo thành công, tải lại danh sách
 *   **AC-003**: Ngăn chặn trùng lặp hoàn toàn. Hệ thống không cho phép lưu hai bản ghi có cùng `keyword` + `synonym` trên cùng một tenant.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Quyền truy cập: Chỉ các tài khoản có role `admin` hoặc `tenant_manager` mới được phép thao tác các API này. Các API bắt buộc phải validate quyền.
-*   **BR-002**: Đồng bộ Cache: Ngay khi bảng `synonyms` thay đổi (Insert/Update/Delete), hệ thống bắt buộc phải invalidate khóa cache tương ứng trong Redis (ví dụ khóa: `synonyms:{tenant_id}`).
+* Tham chiếu các quy tắc từ [BR-703 và BR-704](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#g-ai-suggestion--admin-dictionary-management-qu%E1%BA%A3n-tr%E1%BB%8B-t%E1%BB%AB-%C4%91i%E1%BB%83n--%C4%91%E1%BB%81-xu%E1%BA%A5t-ai) trong tài liệu BRD.
+

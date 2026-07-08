@@ -71,7 +71,5 @@ FE->>Buyer: Hiển thị danh sách gợi ý
 *   **AC-005**: Giao diện dropdown gợi ý phải hiển thị dạng danh sách hàng dọc thu nhỏ (vertical list), giới hạn chiều cao hiển thị tối đa khoảng 5 sản phẩm đầu tiên (chiều cao tối đa 300px), các kết quả còn lại hiển thị qua thanh cuộn (scroll) và không được chồng đè lên chân trang (Footer).
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Phải áp dụng kỹ thuật Debounce (150ms) ở Frontend để tránh spam request lên server khi người dùng gõ nhanh.
-*   **BR-002**: Trường gợi ý phải bao gồm: Tên sản phẩm, Danh mục, và Thương hiệu.
-*   **BR-003**: Phân biệt hoa thường: Không phân biệt chữ hoa, chữ thường khi thực hiện so khớp gợi ý.
-*   **BR-004**: Tìm kiếm gợi ý có nhiều từ (multi-word suggest) phải khớp đồng thời tất cả các từ đơn (AND operator) trong chuỗi gợi ý để đảm bảo tính chính xác ngữ nghĩa và tránh hiển thị gợi ý lệch danh mục.
+* Tham chiếu các quy tắc từ [BR-101 đến BR-104](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#a-autocomplete-g%E1%BB%A3i-%C3%BD-t%E1%BB%AB-kh%C3%B3a) trong tài liệu BRD.
+

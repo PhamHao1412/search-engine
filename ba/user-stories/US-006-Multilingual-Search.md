@@ -79,6 +79,5 @@ FE->>Buyer: Hiển thị sản phẩm lên màn hình
 *   **AC-004 (API Suggest Đa Ngôn Ngữ)**: Khi người dùng gõ từ khóa trong ô tìm kiếm ở bất kỳ ngôn ngữ nào, danh sách gợi ý tự động (auto-suggest) phải trả về sản phẩm khớp đa ngôn ngữ, đồng thời ưu tiên hiển thị các sản phẩm có ngôn ngữ khớp với ngôn ngữ giao diện đang active lên đầu nhờ cơ chế boost trọng số.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Trọng số tìm kiếm ngôn ngữ hiện tại của người dùng (ngôn ngữ UI) phải luôn được thiết lập cao nhất (boost: 5) để ưu tiên kết quả khớp ngôn ngữ gốc.
-*   **BR-002**: Việc dịch thuật từ khóa tìm kiếm (Search-time) chỉ sử dụng từ điển dịch thuật tĩnh (`translations` table) được Admin quản trị hoặc kết quả dịch cache, tuyệt đối **không gọi Google Translate API thời gian thực** trong luồng search của người dùng để tránh nghẽn mạng và tăng độ trễ.
-*   **BR-003**: Bộ nhớ đệm cache cho API Suggest phải được phân tách rõ rệt theo cả ngôn ngữ (`query:lang`) để tránh việc người dùng ở giao diện tiếng Anh nhận gợi ý cache của người dùng ở giao diện tiếng Việt.
+* Tham chiếu các quy tắc từ [BR-401 đến BR-403](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#d-tìm-kiếm-đa-ngôn-ngữ) trong tài liệu BRD.
+

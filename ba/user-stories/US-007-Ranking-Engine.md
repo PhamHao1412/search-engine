@@ -63,5 +63,5 @@ FE->>Buyer: Hiển thị sản phẩm theo thứ tự tối ưu
 *   **AC-003**: Đảm bảo hiệu năng tính toán. Toàn bộ logic tính điểm, nhân hệ số nổi bật và suy hao kho hàng phải được thực thi trực tiếp bằng engine tìm kiếm của OpenSearch thông qua câu lệnh `function_score` thay vì sắp xếp thủ công bằng Go trong bộ nhớ để đạt độ trễ < 50ms.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Hệ số boost cho Featured Product và hệ số suy hao (decay) cho sản phẩm hết hàng phải được cấu hình động qua biến môi trường (`.env` / Environment Variables) để dễ dàng tinh chỉnh mà không cần sửa code.
-*   **BR-002**: Điểm số BM25 gốc của từ khóa khớp chính xác (Exact Match) hoặc cụm từ (Phrase Match) phải luôn được ưu tiên hàng đầu trước khi áp dụng các bộ nhân trọng số nghiệp vụ.
+* Tham chiếu các quy tắc từ [BR-501 và BR-502](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#e-ranking-engine-xếp-hạng-sản-phẩm) trong tài liệu BRD.
+

@@ -84,7 +84,6 @@ sequenceDiagram
 *   **AC-004**: Ghi nhận đúng đắn dữ liệu search log và click log từ cả hai luồng tương tác (autocomplete click và search enter -> result click) để làm cơ sở tính toán CTR và vị trí click trung bình.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Background Cron Job tổng hợp dữ liệu chạy hàng giờ để cập nhật số liệu CTR, Zero Result và phân bổ theo danh mục vào bảng tổng hợp.
-*   **BR-002**: Background Cron Job dọn dẹp chạy lúc 2 AM hàng ngày để tự động xóa các dữ liệu raw logs (`search_logs`, `click_logs`) cũ hơn 90 ngày (Data Retention Policy) để tiết kiệm tài nguyên lưu trữ.
-*   **BR-003**: Cung cấp API `POST /api/v1/admin/analytics/trigger?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` cho phép Admin chạy tổng hợp lại số liệu thủ công theo khoảng thời gian tùy chọn phục vụ việc sửa lỗi hoặc đồng bộ lại dữ liệu.
+* Tham chiếu các quy tắc từ [BR-603 đến BR-605](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#f-click-tracking-analytics-theo-d%C3%B5i-th%E1%BB%91ng-k%C3%AA) trong tài liệu BRD.
+
 

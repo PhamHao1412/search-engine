@@ -100,7 +100,35 @@ Admin duyệt/từ chối đề xuất
   +--> Xóa Cache của Tenant tương ứng trên Redis
 ```
 
+-----------------------------------
+
+### Luồng AI Conversational Assistant (Trợ lý AI Đàm thoại)
+
+```
+Admin
+  |
+  v
+Search UI (Frontend React/Vite - Tab Trợ lý AI)
+  |
+  v
+Search Service (serverd)
+  |
+  +--> Quản lý phiên/Tin nhắn: PostgreSQL (bảng `assistant_conversations` & `assistant_messages`)
+  |
+  +--> Đàm thoại & Gọi hàm: OpenAI API (gpt-4o-mini & Tool Calling)
+         |
+         +--> Tra cứu sản phẩm (OpenSearch)
+         +--> Lập đề xuất thêm/xóa từ đồng nghĩa/sửa lỗi chính tả
+  |
+  v
+Giao diện hiển thị đề xuất (Action Cards)
+  |
+  v (Admin click phê duyệt)
+Lưu DB chính thức & Invalidate Cache Redis
+```
+
 ---
+
 
 ## 3. Công nghệ sử dụng
 
@@ -351,6 +379,7 @@ Không được:
 - [x] **US-010 AI Suggestion Engine** [Completed] - Sử dụng OpenAI offline job để quét log tìm gợi ý Synonym & Spellcheck mới.
 - [x] **US-011 Synonym Management** [Completed] - API và UI quản trị thêm/xóa từ đồng nghĩa & sửa lỗi chính tả thủ công.
 - [x] **US-012 Approve AI Suggestion** [Completed] - API và UI quản trị phê duyệt/bác bỏ đề xuất gợi ý của AI.
+- [x] **US-013 Admin AI Assistant** [Completed] - Trợ lý AI đàm thoại quản trị, lưu trữ phiên chat vào Postgres, hỗ trợ đề xuất synonym/spellcheck bằng ngôn ngữ tự nhiên.
 
 ---
 

@@ -71,5 +71,5 @@ UI->>Admin: Ẩn bản ghi đã duyệt, hiển thị thông báo thành công
 *   **AC-003**: Invalidate cache chính xác. Ngay sau khi duyệt đề xuất Synonym hoặc Typo, cache Redis tương ứng của tenant phải được xóa ngay lập tức để người mua được áp dụng quy tắc mới trong giây tiếp theo.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Chỉ Admin mới có quyền thực hiện thao tác duyệt/từ chối gợi ý AI.
-*   **BR-002**: Các bản ghi bị từ chối (`rejected`) vẫn giữ lại trong bảng `ai_suggestions` để AI Worker tránh quét và đề xuất lại cùng một từ khóa trong tương lai.
+* Tham chiếu các quy tắc từ [BR-705 và BR-706](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#g-ai-suggestion--admin-dictionary-management-qu%E1%BA%A3n-tr%E1%BB%8B-t%E1%BB%AB-%C4%91i%E1%BB%83n--%C4%91%E1%BB%81-xu%E1%BA%A5t-ai) trong tài liệu BRD.
+

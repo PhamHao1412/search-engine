@@ -106,5 +106,5 @@ sequenceDiagram
 *   **AC-006**: Lịch sử hội thoại phải được lưu bền vững dưới PostgreSQL, tải đúng theo Tenant ID và có thể tạo mới/xóa bỏ phiên hội thoại.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Thao tác click Accept từ UI sẽ kích hoạt các REST API nghiệp vụ chuẩn, qua đó đảm bảo tính năng đồng bộ cache Redis tự động hoạt động hoàn chỉnh.
-*   **BR-002**: Lịch sử chat được lưu trữ bền vững tại PostgreSQL dưới schema `search_svc` với 2 bảng `assistant_conversations` và `assistant_messages`, hỗ trợ liên kết khóa ngoại cascade delete khi Admin xóa phiên trò chuyện.
+* Tham chiếu các quy tắc từ [BR-801 và BR-802](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#h-ai-assistant-trợ-lý-ai-đàm-thoại) trong tài liệu BRD.
+

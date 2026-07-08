@@ -68,6 +68,5 @@ FE->>Buyer: Hiển thị sản phẩm lên màn hình
 *   **AC-003**: Điểm số tương quan (ranking score) của kết quả khớp từ khóa gốc phải cao hơn kết quả khớp từ khóa đồng nghĩa (thực hiện bằng cách giảm trọng số boost của từ đồng nghĩa xuống khoảng `0.5` đến `0.7`).
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Chỉ các từ đồng nghĩa có trạng thái `approved` (hoặc `active`) mới được sử dụng để mở rộng truy vấn.
-*   **BR-002**: Tránh vòng lặp mở rộng vô hạn (infinite recursion) bằng cách chỉ mở rộng một cấp độ (không mở rộng bắc cầu: nếu A=B và B=C, tìm A chỉ mở rộng thành B, không mở rộng thành C trừ khi được khai báo trực tiếp).
-*   **BR-003**: Từ điển đồng nghĩa của từng tenant được cache riêng biệt trong Redis để tránh xung đột dữ liệu.
+* Tham chiếu các quy tắc từ [BR-301 đến BR-303](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#c-synonym-expansion-m%E1%BB%9F-r%E1%BB%99ng-t%E1%BB%AB-%C4%91%E1%BB%93ng-ngh%C4%A9a) trong tài liệu BRD.
+

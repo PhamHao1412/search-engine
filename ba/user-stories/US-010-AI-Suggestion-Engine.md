@@ -77,5 +77,5 @@ sequenceDiagram
 *   **AC-003**: Dữ liệu lưu vào bảng `ai_suggestions` phải đầy đủ các trường: `suggestion_type`, `source_value`, `suggested_value`, `confidence_score` và `status = 'pending'`.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Phải cung cấp API thủ công để hỗ trợ trigger debug trên môi trường local/development mà không bị phụ thuộc vào cron job.
-*   **BR-002**: Không tạo đề xuất trùng lặp. Nếu một đề xuất (`source_value` + `suggested_value` + `suggestion_type`) đã tồn tại trong bảng `ai_suggestions` với trạng thái `pending` hoặc `approved`, hệ thống sẽ bỏ qua và không insert mới.
+* Tham chiếu các quy tắc từ [BR-701 và BR-702](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#g-ai-suggestion--admin-dictionary-management-qu%E1%BA%A3n-tr%E1%BB%8B-t%E1%BB%AB-%C4%91i%E1%BB%83n--%C4%91%E1%BB%81-xu%E1%BA%A5t-ai) trong tài liệu BRD.
+

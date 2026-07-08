@@ -81,6 +81,18 @@ Các tính năng chính:
                            |
                            v
                  Admin UI (Duyệt/Bác bỏ)
+
+
+====================================================
+
+
+                 Admin UI (React/Vite) -> Trợ lý AI
+                            |
+                            v
+                  Search Service (serverd) <---> PostgreSQL (assistant_conversations/messages)
+                            |
+                            v
+                    OpenAI API (gpt-4o-mini)
 ```
 
 ---
@@ -132,6 +144,9 @@ Source of Truth (SoT) cho catalog và lưu trữ dữ liệu phân tích/logs:
   * `spellcheck_dictionary`: Từ điển sửa lỗi chính tả (typo word -> correct word).
   * `ai_suggestions`: Các gợi ý do AI đề xuất đang chờ duyệt hoặc đã xử lý.
   * `search_sync_jobs`: Theo dõi trạng thái đồng bộ và mã băm text (`text_hash`) để tối ưu hóa việc ingest.
+  * `assistant_conversations`: Quản lý các phiên hội thoại của trợ lý AI.
+  * `assistant_messages`: Lưu lịch sử tin nhắn và trạng thái duyệt đề xuất của từng hội thoại.
+
 
 ---
 

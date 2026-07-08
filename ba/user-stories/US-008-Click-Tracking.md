@@ -68,5 +68,5 @@ FE->>Buyer: Chuyển hướng sang trang chi tiết sản phẩm
 *   **AC-003**: Nếu người dùng click cùng một sản phẩm nhiều lần trong cùng một phiên tìm kiếm, hệ thống vẫn ghi nhận đầy đủ các sự kiện click phục vụ thống kê tần suất.
 
 ## Quy tắc nghiệp vụ (BR)
-*   **BR-001**: Để đảm bảo tính tin cậy khi người dùng chuyển trang nhanh, Frontend có thể sử dụng API `navigator.sendBeacon` hoặc cấu hình Fetch ở chế độ `keepalive: true`.
-*   **BR-002**: Nếu `search_log_id` truyền lên không hợp lệ hoặc không đúng định dạng UUID, API vẫn trả về `200 OK` nhưng ghi log warning ở backend để tránh làm gián đoạn trải nghiệm của người dùng khi có lỗi track log.
+* Tham chiếu các quy tắc từ [BR-601 và BR-602](file:///Users/haopham/go-playground/search-engine/ba/brd/swiftsearch-search-engine-brd.md#f-click-tracking-analytics-theo-d%C3%B5i-th%E1%BB%91ng-k%C3%AA) trong tài liệu BRD.
+
