@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swift Search Engine - PA Presentation</title>
+
+    <!-- Google Fonts for Bold Signal Preset -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ===========================================
+           CSS CUSTOM PROPERTIES (THEME: BOLD SIGNAL)
+           =========================================== */
+        :root {
+            --bg-primary: #0b0c10;
+            --bg-gradient: radial-gradient(circle at 50% 50%, #1f2833 0%, #0b0c10 100%);
+            --card-bg: #ff5722; /* Bold Neon Orange */
+            --accent-cyan: #66fcf1; /* Neon Cyan */
+            --text-primary: #ffffff;
+            --text-secondary: #c5c6c7;
+            --text-muted: #45f3ff;
+            --text-on-card: #0b0c10;
+
+            /* Typography */
+            --font-display: 'Archivo Black', sans-serif;
+            --font-body: 'Space Grotesk', sans-serif;
+
+            /* Viewport scaling */
+            --title-size: clamp(1.8rem, 5.5vw, 3.8rem);
+            --h2-size: clamp(1.4rem, 4vw, 2.4rem);
+            --h3-size: clamp(1.1rem, 2.5vw, 1.6rem);
+            --body-size: clamp(0.85rem, 1.4vw, 1.15rem);
+            --small-size: clamp(0.7rem, 1vw, 0.9rem);
+
+            /* Spacing */
+            --slide-padding: clamp(1.2rem, 5vw, 4rem);
+            --content-gap: clamp(0.8rem, 2.5vh, 2.2rem);
+            --element-gap: clamp(0.4rem, 1.2vh, 1.2rem);
+
+            /* Animations */
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration-normal: 0.7s;
+        }
+
+        /* ===========================================
+           BASE STYLES & VIEWPORT FITTING
+           =========================================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-primary);
+            font-family: var(--font-body);
+            color: var(--text-primary);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            position: relative;
+        }
+
+        /* Grid background pattern */
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            z-index: 1000;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--card-bg);
+            box-shadow: 0 0 10px var(--card-bg);
+            transition: width 0.3s ease;
+        }
+
+        /* Slides Container */
+        .slides-container {
+            height: 100%;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            transition: transform var(--duration-normal) var(--ease-out-expo);
+            z-index: 2;
+            position: relative;
+        }
+
+        /* Single Slide - MUST fit viewport */
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            flex-shrink: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: var(--bg-gradient);
+            padding: var(--slide-padding);
+        }
+
+        .slide-content {
+            height: 100%;
+            width: 100%;
+            max-width: min(92vw, 1200px);
+            max-height: min(85vh, 750px);
+            margin: auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        /* Slide layout styles */
+        .slide-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: var(--element-gap);
+        }
+
+        .slide-title {
+            font-family: var(--font-display);
+            font-size: var(--h2-size);
+            color: #ffffff;
+            letter-spacing: -0.02em;
+            text-transform: uppercase;
+        }
+
+        .slide-number {
+            font-family: var(--font-display);
+            font-size: var(--h3-size);
+            color: var(--card-bg);
+            opacity: 0.8;
+        }
+
+        .slide-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            margin-top: var(--content-gap);
+            max-height: calc(100% - 60px);
+        }
+
+        /* Mermaid diagram full-slide scaling */
+        .slide-body > .mermaid,
+        .slide-body > div > .mermaid {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            padding: 12px 0;
+            box-sizing: border-box;
+        }
+        .slide-body .mermaid svg {
+            width: 100% !important;
+            height: auto !important;
+            display: block;
+            overflow: visible !important;
+        }
+
+        /* ===========================================
+           TYPOGRAPHY & ELEMENTS
+           =========================================== */
+        h1, h2, h3 {
+            font-family: var(--font-display);
+            text-transform: uppercase;
+        }
+
+        h1 {
+            font-size: var(--title-size);
+            line-height: 1.1;
+            margin-bottom: 0.2em;
+        }
+
+        p {
+            font-size: var(--body-size);
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* Lists */
+        ul {
+            list-style: none;
+        }
+
+        li {
+            position: relative;
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-size: var(--body-size);
+            line-height: 1.4;
+        }
+
+        li::before {
+            content: "■";
+            position: absolute;
+            left: 0;
+            top: 0.1em;
+            color: var(--card-bg);
+            font-size: 0.8em;
+        }
+
+        /* Grid Layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--content-gap);
+            align-items: center;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--element-gap);
+        }
+
+        .grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--element-gap);
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: var(--slide-padding);
+            height: 100%;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .card:hover {
+            border-color: var(--card-bg);
+            background: rgba(255, 87, 34, 0.05);
+            transform: translateY(-5px);
+        }
+
+        .card-accent {
+            border-top: 4px solid var(--card-bg);
+        }
+
+        .card-title {
+            font-size: var(--h3-size);
+            color: var(--accent-cyan);
+            margin-bottom: 0.5rem;
+        }
+
+        .highlight-box {
+            background: var(--card-bg);
+            color: var(--text-on-card);
+            padding: 1.2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(255, 87, 34, 0.2);
+        }
+
+        .highlight-box h3 {
+            font-family: var(--font-display);
+            margin-bottom: 0.3rem;
+            color: var(--text-on-card);
+        }
+
+        .highlight-box p {
+            color: rgba(11, 12, 16, 0.8);
+            font-weight: 500;
+        }
+
+        /* Inline badges */
+        .badge {
+            display: inline-block;
+            background: rgba(102, 252, 241, 0.1);
+            color: var(--accent-cyan);
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: var(--small-size);
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .badge-orange {
+            background: rgba(255, 87, 34, 0.1);
+            color: var(--card-bg);
+        }
+
+        /* ===========================================
+           ARCHITECTURE DIAGRAM DESIGN
+           =========================================== */
+        .architecture-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.4rem, 1.5vh, 1.2rem);
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1rem;
+            max-height: 480px;
+            overflow: hidden;
+        }
+
+        .diag-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.5rem;
+        }
+
+        .diag-row:last-child {
+            border: none;
+            padding-bottom: 0;
+        }
+
+        .diag-section-title {
+            font-size: var(--small-size);
+            font-weight: bold;
+            color: var(--accent-cyan);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .diag-nodes {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .diag-node {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 0.4rem 0.7rem;
+            border-radius: 6px;
+            font-size: clamp(0.7rem, 1.2vw, 0.95rem);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .diag-node.highlight {
+            background: var(--card-bg);
+            color: var(--text-on-card);
+            border-color: var(--card-bg);
+            font-weight: 700;
+        }
+
+        .diag-node.db {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            background: rgba(102, 252, 241, 0.05);
+        }
+
+        .diag-arrow {
+            color: rgba(255, 255, 255, 0.3);
+            font-weight: bold;
+            font-family: monospace;
+        }
+
+        /* ===========================================
+           ANIMATIONS (REVEAL)
+           =========================================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity var(--duration-normal) var(--ease-out-expo),
+                        transform var(--duration-normal) var(--ease-out-expo);
+        }
+
+        .slide.visible .reveal {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .reveal:nth-child(1) { transition-delay: 0.1s; }
+        .reveal:nth-child(2) { transition-delay: 0.25s; }
+        .reveal:nth-child(3) { transition-delay: 0.4s; }
+        .reveal:nth-child(4) { transition-delay: 0.55s; }
+
+        /* ===========================================
+           SLIDE SPECIFIC FORMATTING
+           =========================================== */
+        /* Title Slide */
+        .title-slide-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .title-accent-card {
+            background: var(--card-bg);
+            color: var(--text-on-card);
+            padding: 3rem var(--slide-padding);
+            border-radius: 16px;
+            margin-bottom: 2rem;
+            box-shadow: 0 20px 50px rgba(255, 87, 34, 0.3);
+            max-width: 1000px;
+        }
+
+        .title-accent-card h1 {
+            color: var(--text-on-card);
+            margin: 0;
+            text-shadow: none;
+        }
+
+        .title-meta {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1rem;
+            font-size: var(--body-size);
+        }
+
+        .title-meta span {
+            font-weight: 500;
+        }
+
+        .title-meta-label {
+            color: var(--accent-cyan);
+            font-family: var(--font-display);
+        }
+
+        /* Navigation Dots */
+        .nav-dots {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 1000;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .dot.active {
+            background: var(--card-bg);
+            transform: scale(1.3);
+            border-color: #ffffff;
+            box-shadow: 0 0 8px var(--card-bg);
+        }
+
+        /* Keyboard Hints */
+        .keyboard-hint {
+            display: none !important;
+        }
+
+        .keyboard-hint kbd {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        /* ===========================================
+           INLINE EDITING UI (JS CONTROLLED)
+           =========================================== */
+        .edit-hotzone {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 60px;
+            height: 60px;
+            z-index: 10000;
+            cursor: pointer;
+        }
+
+        .edit-toggle {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            background: #2d2d2d;
+            border: 2px solid var(--accent-cyan);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 10001;
+            font-family: var(--font-body);
+            font-weight: bold;
+            font-size: 14px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease, background 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .edit-toggle.show,
+        .edit-toggle.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .edit-toggle.active {
+            background: var(--card-bg);
+            border-color: #fff;
+        }
+
+        [contenteditable="true"] {
+            border: 1px dashed var(--accent-cyan);
+            background: rgba(102, 252, 241, 0.05);
+            padding: 2px 4px;
+            outline: none;
+            border-radius: 4px;
+        }
+
+        [contenteditable="true"]:focus {
+            background: rgba(102, 252, 241, 0.1);
+            border-style: solid;
+        }
+
+        /* ===========================================
+           RESPONSIVE HEIGHT ADJUSTMENTS
+           =========================================== */
+        @media (max-height: 700px) {
+            .slide-content {
+                max-height: 90vh;
+            }
+            .grid-2 {
+                gap: 1rem;
+            }
+        }
+        
+        @media (max-height: 600px) {
+            .keyboard-hint, .nav-dots {
+                display: none;
+            }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                background: '#0d0d14',
+                primaryColor: '#1e1e2e',
+                primaryTextColor: '#e8e8f0',
+                primaryBorderColor: '#00d4ff',
+                lineColor: '#5a5a8a',
+                secondaryColor: '#16213e',
+                tertiaryColor: '#1a1a2e',
+                noteBkgColor: '#1e1e2e',
+                noteTextColor: '#e8e8f0',
+                activationBkgColor: '#00d4ff22',
+                activationBorderColor: '#00d4ff',
+                signalColor: '#e8e8f0',
+                signalTextColor: '#e8e8f0',
+                labelBoxBkgColor: '#1e1e2e',
+                labelBoxBorderColor: '#5a5a8a',
+                labelTextColor: '#e8e8f0',
+                loopTextColor: '#e8e8f0',
+                sequenceNumberColor: '#00d4ff'
+            },
+            sequence: {
+                diagramMarginX: 30,
+                diagramMarginY: 20,
+                actorMargin: 80,
+                width: 180,
+                height: 50,
+                boxMargin: 12,
+                boxTextMargin: 8,
+                noteMargin: 14,
+                messageMargin: 40,
+                fontSize: 15
+            }
+        });
+
+        // Re-apply width:100% after Mermaid renders SVGs
+        document.addEventListener('DOMContentLoaded', () => {
+            const observer = new MutationObserver(() => {
+                document.querySelectorAll('.mermaid svg').forEach(svg => {
+                    svg.removeAttribute('width');
+                    svg.removeAttribute('height');
+                    svg.style.width = '100%';
+                    svg.style.height = 'auto';
+                    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                });
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+        });
+    </script>
+</head>
+<body>
+    <div class="bg-grid"></div>
+
+    <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <!-- Edit toggle tools -->
+    <div class="edit-hotzone" title="Click để chuyển đổi chế độ chỉnh sửa"></div>
+    <button class="edit-toggle" id="editToggle">
+        <span id="editIcon">✏️</span> <span id="editText">Edit Mode</span>
+    </button>
+
+    <div class="nav-dots" id="navDots"></div>
+
+    <!-- MAIN SLIDES WRAPPER -->
+    <div class="slides-container" id="slidesContainer">
+
+        <!-- SLIDE 1: TITLE SLIDE -->
+        <section class="slide visible">
+            <div class="slide-content">
+                <div class="title-slide-content">
+                    <div class="title-accent-card reveal">
+                        <h1 class="editable" id="s1-title">SWIFT SEARCH ENGINE</h1>
+                        <p class="editable" style="color: rgba(11,12,16,0.9); font-weight:700;" id="s1-subtitle">
+                            Hệ thống Tìm kiếm Sản phẩm Đa ngôn ngữ Thông minh cho E-Commerce
+                        </p>
+                    </div>
+                    
+                    <div class="reveal">
+                        <div class="title-meta">
+                            <span><span class="title-meta-label">Presenter:</span> Pham Anh Hao</span>
+                            <span><span class="title-meta-label">Role:</span> Backend Engineer</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: AGENDA / TABLE OF CONTENTS -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="s-agenda-title">Nội dung chính</h2>
+                </div>
+                <div class="slide-body" style="justify-content: center; align-items: center;">
+                    <div class="reveal" style="width: 100%; max-width: 1150px;">
+                        <div class="card card-accent" style="padding: 2.2rem 2.8rem; background: rgba(15,17,26,0.9); border-color: var(--accent-cyan); border-radius: 18px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+                            <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1.25rem;">
+                                <li class="editable" style="font-size: 1.32rem; display: flex; align-items: center; gap: 1.2rem;" id="agenda-l1">
+                                    <span class="badge" style="font-size: 1.05rem; padding: 6px 14px; min-width: 46px; text-align: center;">01</span>
+                                    <strong>Quy trình Human-in-the-Loop AI Pair Programming</strong>
+                                </li>
+                                <li class="editable" style="font-size: 1.32rem; display: flex; align-items: center; gap: 1.2rem;" id="agenda-l2">
+                                    <span class="badge badge-orange" style="font-size: 1.05rem; padding: 6px 14px; min-width: 46px; text-align: center;">02</span>
+                                    <strong>Yêu cầu 1 — Tìm kiếm Đa ngôn ngữ (Multilingual Search)</strong>
+                                </li>
+                                <li class="editable" style="font-size: 1.32rem; display: flex; align-items: center; gap: 1.2rem;" id="agenda-l3">
+                                    <span class="badge" style="font-size: 1.05rem; padding: 6px 14px; min-width: 46px; text-align: center;">03</span>
+                                    <strong>Yêu cầu 2 — Gợi ý tìm kiếm thông minh (Smart Autocomplete)</strong>
+                                </li>
+                                <li class="editable" style="font-size: 1.32rem; display: flex; align-items: center; gap: 1.2rem;" id="agenda-l4">
+                                    <span class="badge badge-orange" style="font-size: 1.05rem; padding: 6px 14px; min-width: 46px; text-align: center;">04</span>
+                                    <strong>Yêu cầu 3 — Sửa lỗi chính tả & Từ đồng nghĩa (Spellcheck & Synonyms)</strong>
+                                </li>
+                                <li class="editable" style="font-size: 1.32rem; display: flex; align-items: center; gap: 1.2rem;" id="agenda-l5">
+                                    <span class="badge" style="font-size: 1.05rem; padding: 6px 14px; min-width: 46px; text-align: center;">05</span>
+                                    <strong>Yêu cầu 4 — Xếp hạng kết quả tìm kiếm (Ranking Engine)</strong>
+                                </li>
+                                <li class="editable" style="font-size: 1.32rem; display: flex; align-items: center; gap: 1.2rem;" id="agenda-l6">
+                                    <span class="badge badge-orange" style="font-size: 1.05rem; padding: 6px 14px; min-width: 46px; text-align: center;">06</span>
+                                    <strong>Yêu cầu 5 — Trợ lý Admin AI</strong>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: HUMAN IN THE LOOP WORKFLOW -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="hitl-title">Quy trình Human-in-the-Loop AI Pair Programming</h2>
+                </div>
+                <div class="slide-body" style="justify-content: center; align-items: center; padding: 0.5rem 0;">
+                    <div class="reveal" style="display: flex; justify-content: center; align-items: center; width: 100%; height: 100%;">
+                        <div style="display: inline-flex; border: 1px solid var(--accent-cyan); border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.7); background: rgba(15,17,26,0.95); padding: 6px;">
+                            <img src="hitl_diagram.png" alt="Human-in-the-Loop Diagram" style="max-height: calc(100vh - 200px); max-width: 88vw; object-fit: contain; border-radius: 8px; display: block;" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 3: REQUIREMENT 1 - MULTILINGUAL SEARCH -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="s2-title">Yêu cầu 1 — Tìm kiếm Đa ngôn ngữ</h2>
+                    <span class="slide-number">02/12</span>
+                </div>
+                <div class="slide-body">
+                    <div class="grid-2">
+                        <!-- LEFT: Business Requirement -->
+                        <div class="reveal">
+                            <span class="badge badge-orange">Yêu cầu nghiệp vụ</span>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin: 0.6rem 0;" id="s2-scenario-t">Kịch bản thực tế</h3>
+                            <div style="background: rgba(255,255,255,0.03); border-left: 3px solid var(--card-bg); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; margin-bottom: 1rem;">
+                                <p class="editable" style="font-style: italic; color: var(--text-secondary);" id="s2-scenario-d">Người bán đăng sản phẩm <strong>"Cà phê Robusta nguyên chất"</strong> bằng tiếng Việt. Người mua Thái Lan gõ <strong>"pure robusta coffee"</strong> vào ô tìm kiếm → hệ thống trả về trang trắng, đơn hàng bị mất.</p>
+                            </div>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin-bottom: 0.5rem;" id="s2-req-t">Yêu cầu đặt ra</h3>
+                            <ul>
+                                <li class="editable" id="s2-req-l1">Hỗ trợ tìm kiếm bằng tiếng Việt, tiếng Anh và tiếng Thái trên cùng một hệ thống.</li>
+                                <li class="editable" id="s2-req-l2">Tách từ chuyên biệt cho từng ngôn ngữ — tiếng Thái không có khoảng trắng, tiếng Việt có từ ghép.</li>
+                                <li class="editable" id="s2-req-l3">Kết quả khớp ngôn ngữ gốc của người dùng phải được ưu tiên hơn kết quả khớp qua dịch.</li>
+                            </ul>
+                        </div>
+
+                        <!-- RIGHT: Technical Solution -->
+                        <div class="card card-accent reveal">
+                            <span class="badge">Giải pháp kỹ thuật</span>
+                            <h3 class="card-title editable" style="margin: 0.6rem 0;" id="s2-sol-t">Dịch thuật một lần lúc Seller đăng sản phẩm</h3>
+                            <p class="editable" style="font-size: var(--small-size); margin-bottom: 0.8rem; color: var(--text-secondary);" id="s2-sol-d">Thay vì dịch realtime lúc Buyer tìm kiếm, hệ thống dịch trước và lưu sẵn đầy đủ 3 phiên bản ngôn ngữ trong OpenSearch:</p>
+                            <ul>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2-sol-l1"><strong>Bước 1:</strong> Seller tạo sản phẩm tiếng Việt → lưu vào <strong>PostgreSQL</strong>.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2-sol-l2"><strong>Bước 2:</strong> Sự kiện đẩy vào <strong>Kafka</strong> → <strong>Ingestion Worker</strong> tiêu thụ bất đồng bộ.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2-sol-l3"><strong>Bước 3:</strong> Worker gọi <strong>Google Translate</strong> → dịch sang EN + TH và lưu đủ 3 phiên bản vào <strong>OpenSearch</strong>.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2-sol-l4"><strong>Bước 4:</strong> Khi Buyer tìm bằng tiếng Thái → <strong>OpenSearch</strong> tự động ưu tiên trường ngôn ngữ tương ứng thông qua Dynamic Boosting.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- SLIDE: SEQUENCE DIAGRAM - REQ 1 LUỒNG 1: INGESTION -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title">Luồng Ingestion — Seller đăng sản phẩm</h2>
+                    <span class="slide-number">03/14</span>
+                </div>
+                <div class="slide-body" style="justify-content: center; align-items: center;">
+                    <div class="mermaid">
+sequenceDiagram
+    participant Seller
+    participant PS as Product Service
+    participant PG as PostgreSQL
+    participant W as Ingestion Worker
+    participant GT as Google Translate
+    participant OS as OpenSearch
+
+    Seller->>PS: Đăng sản phẩm (Tiếng Việt)
+    PS->>PG: Lưu bản gốc tiếng Việt
+    PS-)W: Produce message "product.created"
+    Note over W: Consume bất đồng bộ
+    W->>GT: Dịch VI → EN
+    GT-->>W: Bản dịch tiếng Anh
+    W->>GT: Dịch VI → TH
+    GT-->>W: Bản dịch tiếng Thái
+    W->>OS: Lưu đủ 3 phiên bản (VI + EN + TH)
+    Note over OS: Sản phẩm sẵn sàng cho mọi ngôn ngữ
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: SEQUENCE DIAGRAM - REQ 1 LUỒNG 2: SEARCH -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title">Luồng Search — Buyer tìm kiếm đa ngôn ngữ</h2>
+                    <span class="slide-number">04/14</span>
+                </div>
+                <div class="slide-body" style="justify-content: center; align-items: center;">
+                    <div class="mermaid">
+sequenceDiagram
+    participant B as Buyer (Thái/Anh)
+    participant SS as Search Service
+    participant OS as OpenSearch
+
+    B->>SS: Tìm kiếm "pure robusta coffee" (lang=en)
+    SS->>OS: Query + Dynamic Boosting theo ngôn ngữ
+    Note over OS: Dynamic Boosting (lang=en):<br/>• product_name_en^5.0 (Tên gốc)<br/>• category_name^3.0<br/>• product_name_vi/th^1.5 (Tên dịch)
+    OS-->>SS: Kết quả đã xếp hạng
+    SS-->>B: Trả kết quả — tìm thấy "Cà phê Robusta nguyên chất"
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- SLIDE: REQUIREMENT 2 - SMART AUTOCOMPLETE -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="s2c-title">Yêu cầu 2 — Gợi ý tìm kiếm thông minh</h2>
+                    <span class="slide-number">05/16</span>
+                </div>
+                <div class="slide-body">
+                    <div class="grid-2">
+                        <!-- LEFT: Business Requirement -->
+                        <div class="reveal">
+                            <span class="badge badge-orange">Yêu cầu nghiệp vụ</span>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin: 0.6rem 0;" id="s2c-scenario-t">Kịch bản thực tế</h3>
+                            <div style="background: rgba(255,255,255,0.03); border-left: 3px solid var(--card-bg); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; margin-bottom: 1rem;">
+                                <p class="editable" style="font-style: italic; color: var(--text-secondary);" id="s2c-scenario-d">Buyer vừa gõ vài ký tự đầu (như <strong>"ca phe"</strong>) — hệ thống phải lập tức gợi ý đúng tên sản phẩm. Nếu không hiểu từ ghép tiếng Việt hay tiếng Thái viết liền, gợi ý sẽ sai và làm mất khách.</p>
+                            </div>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin-bottom: 0.5rem;" id="s2c-req-t">Yêu cầu đặt ra</h3>
+                            <ul>
+                                <li class="editable" id="s2c-req-l1">Gợi ý từ khóa chính xác ngay từ những ký tự đầu tiên.</li>
+                                <li class="editable" id="s2c-req-l2">Hỗ trợ gợi ý đa ngôn ngữ (tiếng Việt, Anh, Thái).</li>
+                                <li class="editable" id="s2c-req-l3">Tự động lọc bỏ các trợ từ/từ đệm không mang ý nghĩa tìm kiếm.</li>
+                                <li class="editable" id="s2c-req-l4">Xử lý đúng từ ghép tiếng Việt và câu viết liền tiếng Thái.</li>
+                            </ul>
+                        </div>
+
+                        <!-- RIGHT: Technical Solution -->
+                        <div class="card card-accent reveal">
+                            <span class="badge">Giải pháp kỹ thuật</span>
+                            <h3 class="card-title editable" style="margin: 0.6rem 0;" id="s2c-sol-t">Phân tách ngôn ngữ & Băm từ N-Gram</h3>
+                            <ul>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2c-sol-l1"><strong>Analyzer chuyên biệt 3 ngôn ngữ:</strong> <code>vi_ascii_analyzer</code> (xoá dấu tiếng Việt), <code>english</code> (lọc stopwords), <code>thai</code> (tách từ viết liền bằng từ điển).</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2c-sol-l2"><strong>Gộp tên đa ngôn ngữ (<code>suggest</code> field):</strong> Gộp tên cả 3 ngôn ngữ vào duy nhất field <code>suggest</code> khi nạp dữ liệu ➔ Tìm bằng ngôn ngữ nào cũng ra gợi ý.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2c-sol-l3"><strong>Băm nhỏ N-gram (2–10 ký tự):</strong> Dùng <code>autocomplete_analyzer</code> băm sẵn các mảnh từ dở dang ➔ Mới gõ 2 ký tự là tra ra kết quả ngay.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: OPENSEARCH SETTINGS & MAPPINGS FOR AUTOCOMPLETE -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="s2c-code-title">Cấu hình OpenSearch Settings & Mappings (Autocomplete)</h2>
+                    <span class="slide-number">06/18</span>
+                </div>
+                <div class="slide-body" style="justify-content: center; align-items: flex-start; padding-bottom: 1rem;">
+                    <div class="grid-2" style="width: 100%; gap: 1rem; align-items: flex-start; max-height: calc(100vh - 230px);">
+                        <!-- LEFT COLUMN: Settings -->
+                        <div class="card card-accent reveal" style="display: flex; flex-direction: column; padding: 1rem 1.2rem; background: #0f111a; border-color: var(--accent-cyan); border-radius: 12px;">
+                            <span class="badge" style="align-self: flex-start; margin-bottom: 0.6rem;">1. Index Settings & Custom Analyzers</span>
+                            <pre style="font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.78rem; line-height: 1.35; color: #e8e8f0; margin: 0; white-space: pre; overflow-x: auto; background: #0b0c10; padding: 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);"><span style="color:#ff79c6;">"settings"</span>: {
+  <span style="color:#ff79c6;">"analysis"</span>: {
+    <span style="color:#ff79c6;">"filter"</span>: {
+      <span style="color:#ff79c6;">"autocomplete_filter"</span>: {
+        <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"ngram"</span>,
+        <span style="color:#8be9fd;">"min_gram"</span>: <span style="color:#bd93f9;">2</span>,
+        <span style="color:#8be9fd;">"max_gram"</span>: <span style="color:#bd93f9;">10</span>
+      }
+    },
+    <span style="color:#ff79c6;">"analyzer"</span>: {
+      <span style="color:#ff79c6;">"vi_ascii_analyzer"</span>: {
+        <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"custom"</span>,
+        <span style="color:#8be9fd;">"tokenizer"</span>: <span style="color:#f1fa8c;">"standard"</span>,
+        <span style="color:#8be9fd;">"filter"</span>: [<span style="color:#f1fa8c;">"lowercase"</span>, <span style="color:#f1fa8c;">"asciifolding"</span>]
+      },
+      <span style="color:#ff79c6;">"autocomplete_analyzer"</span>: {
+        <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"custom"</span>,
+        <span style="color:#8be9fd;">"tokenizer"</span>: <span style="color:#f1fa8c;">"standard"</span>,
+        <span style="color:#8be9fd;">"filter"</span>: [
+          <span style="color:#f1fa8c;">"lowercase"</span>,
+          <span style="color:#f1fa8c;">"asciifolding"</span>,
+          <span style="color:#f1fa8c;">"autocomplete_filter"</span>
+        ]
+      }
+    }
+  }
+}</pre>
+                        </div>
+
+                        <!-- RIGHT COLUMN: Mappings -->
+                        <div class="card card-accent reveal" style="display: flex; flex-direction: column; padding: 1rem 1.2rem; background: #0f111a; border-color: var(--accent-orange); border-radius: 12px;">
+                            <span class="badge badge-orange" style="align-self: flex-start; margin-bottom: 0.6rem;">2. Field Mappings & Suggest Field</span>
+                            <pre style="font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.78rem; line-height: 1.35; color: #e8e8f0; margin: 0; white-space: pre; overflow-x: auto; background: #0b0c10; padding: 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);"><span style="color:#ff79c6;">"mappings"</span>: {
+  <span style="color:#ff79c6;">"properties"</span>: {
+    <span style="color:#ff79c6;">"id"</span>: { <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"keyword"</span> },
+    <span style="color:#ff79c6;">"tenant_id"</span>: { <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"keyword"</span> },
+    <span style="color:#ff79c6;">"product_name_vi"</span>: { 
+      <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"text"</span>, 
+      <span style="color:#8be9fd;">"analyzer"</span>: <span style="color:#50fa7b;">"vi_ascii_analyzer"</span> 
+    },
+    <span style="color:#ff79c6;">"product_name_en"</span>: { 
+      <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"text"</span>, 
+      <span style="color:#8be9fd;">"analyzer"</span>: <span style="color:#50fa7b;">"english"</span> 
+    },
+    <span style="color:#ff79c6;">"product_name_th"</span>: { 
+      <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"text"</span>, 
+      <span style="color:#8be9fd;">"analyzer"</span>: <span style="color:#50fa7b;">"thai"</span> 
+    },
+    <span style="color:#ff79c6;">"suggest"</span>: {
+      <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"text"</span>,
+      <span style="color:#8be9fd;">"analyzer"</span>: <span style="color:#ffb86c;">"autocomplete_analyzer"</span>,
+      <span style="color:#8be9fd;">"search_analyzer"</span>: <span style="color:#50fa7b;">"vi_ascii_analyzer"</span>
+    }
+  }
+}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: SEQUENCE DIAGRAM - REQUIREMENT 2 (SMART AUTOCOMPLETE) -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title">Luồng xử lý — Gợi ý tìm kiếm thông minh (Autocomplete)</h2>
+                    <span class="slide-number">07/19</span>
+                </div>
+                <div class="slide-body" style="justify-content: center; align-items: center; overflow: visible;">
+                    <div class="mermaid">
+sequenceDiagram
+    participant B as Buyer
+    participant SS as Search Service
+    participant OS as OpenSearch
+
+    B->>SS: Tìm kiếm từ khóa gợi ý (GET /api/v1/search/suggest?q=cà&tenant_id=T1)
+    SS->>OS: Truy vấn bool.should (suggest field ^2.0 + multi_match fields)
+    Note over OS: Tra từ "ca" vào mảng N-gram lưu sẵn (min:2, max:10)<br/>Lọc chính xác theo tenant_id đối tác
+    OS-->>SS: Trả về danh sách gợi ý phù hợp nhất
+    SS-->>B: Trả về Top 10 gợi ý từ khóa (Menu Autocomplete)
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- SLIDE: REQUIREMENT 3 - SPELLCHECK, SYNONYMS & AI SELF-LEARNING -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="s2b-title">Yêu cầu 3 — Sửa lỗi chính tả & Từ đồng nghĩa</h2>
+                    <span class="slide-number">06/16</span>
+                </div>
+                <div class="slide-body">
+                    <div class="grid-2">
+                        <!-- LEFT: Business Requirement -->
+                        <div class="reveal">
+                            <span class="badge badge-orange">Yêu cầu nghiệp vụ</span>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin: 0.6rem 0;" id="s2b-scenario-t">Kịch bản thực tế</h3>
+                            <div style="background: rgba(255,255,255,0.03); border-left: 3px solid var(--card-bg); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; margin-bottom: 1rem;">
+                                <p class="editable" style="font-style: italic; color: var(--text-secondary);" id="s2b-scenario-d">Buyer gõ <strong>"samsng"</strong> thay vì "samsung", hoặc tìm <strong>"mì tôm"</strong> trong khi sản phẩm được đăng là <strong>"mì ăn liền"</strong> → hệ thống trả về trang trắng, Buyer bỏ giỏ hàng.</p>
+                            </div>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin-bottom: 0.5rem;" id="s2b-req-t">Yêu cầu đặt ra</h3>
+                            <ul>
+                                <li class="editable" id="s2b-req-l1">Tự động nhận diện và sửa lỗi chính tả phổ biến, trả về kết quả đúng kèm thông báo từ khóa đã được sửa.</li>
+                                <li class="editable" id="s2b-req-l2">Ánh xạ nhiều từ đồng nghĩa hoặc từ địa phương về cùng một nhóm sản phẩm.</li>
+                                <li class="editable" id="s2b-req-l3">Hệ thống tự động học từ hành vi thực tế của người dùng để ngày càng thông minh hơn mà không cần cấu hình thủ công liên tục.</li>
+                            </ul>
+                        </div>
+
+                        <!-- RIGHT: Technical Solution -->
+                        <div class="card card-accent reveal">
+                            <span class="badge">Giải pháp kỹ thuật</span>
+                            <h3 class="card-title editable" style="margin: 0.6rem 0;" id="s2b-sol-t">Vòng lặp tự học — AI phân tích, Admin duyệt</h3>
+                            <ul>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2b-sol-l1"><strong>Bước 1:</strong> Mỗi lượt tìm kiếm được ghi lại vào <strong>PostgreSQL</strong> (Search Logs) bất đồng bộ — không ảnh hưởng tốc độ phản hồi.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2b-sol-l2"><strong>Bước 2:</strong> <strong>Batch Job</strong> định kỳ quét các từ khóa có kết quả bằng 0 → gửi lên <strong>OpenAI</strong> phân tích → xác định là lỗi chính tả hay từ đồng nghĩa → sinh ra cặp <em>(từ sai → từ đúng)</em>.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2b-sol-l3"><strong>Bước 3:</strong> Đề xuất lưu vào <strong>PostgreSQL</strong> ở trạng thái chờ → Admin duyệt trên Dashboard.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s2b-sol-l4"><strong>Bước 4:</strong> Lần sau Buyer tìm kiếm → <strong>Search Service</strong> đối chiếu bảng mapping → lấy từ đúng → truy vấn <strong>OpenSearch</strong> → trả về kết quả. Vòng lặp tiếp tục.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: SEQUENCE DIAGRAM - REQUIREMENT 3 (SPELLCHECK & AI SELF-LEARNING) -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title">Luồng xử lý — Sửa lỗi & Tự học</h2>
+                    <span class="slide-number">07/16</span>
+                </div>
+                <div class="slide-body" style="justify-content: center; align-items: center; overflow: visible;">
+                    <div class="mermaid">
+sequenceDiagram
+    participant B as Buyer
+    participant SS as Search Service
+    participant PG as PostgreSQL
+    participant BJ as Batch Job
+    participant AI as OpenAI
+    participant A as Admin
+
+    Note over B,PG: Lần đầu — Tìm từ sai
+    B->>SS: Tìm "samsng"
+    SS-->>B: Trang trắng (zero result)
+    SS-)PG: Ghi log bất đồng bộ
+
+    Note over BJ,A: Batch Job định kỳ
+    BJ->>PG: Quét zero-result logs
+    BJ->>AI: Phân tích spellcheck / synonym
+    AI-->>BJ: samsng → samsung
+    BJ->>PG: Lưu mapping (chờ duyệt)
+    A->>PG: Duyệt đề xuất
+
+    Note over B,PG: Lần sau — Áp dụng mapping
+    B->>SS: Tìm "samsng"
+    SS->>PG: Lấy mapping → "samsung"
+    SS-->>B: ✓ Có kết quả!
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: REQUIREMENT 4 - RANKING & RELEVANCE SCORING -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="s3-req-title">Yêu cầu 4 — Xếp hạng kết quả tìm kiếm (Ranking)</h2>
+                    <span class="slide-number">08/16</span>
+                </div>
+                <div class="slide-body">
+                    <div class="grid-2">
+                        <!-- LEFT: Business Requirement -->
+                        <div class="reveal">
+                            <span class="badge badge-orange">Yêu cầu nghiệp vụ</span>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin: 0.6rem 0;" id="s3-scenario-t">Kịch bản thực tế</h3>
+                            <div style="background: rgba(255,255,255,0.03); border-left: 3px solid var(--accent-orange); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; margin-bottom: 1rem;">
+                                <p class="editable" style="font-style: italic; color: var(--text-secondary);" id="s3-scenario-d">Buyer gõ tìm <strong>"cà phê"</strong>, hệ thống trả về hàng trăm kết quả. Một sản phẩm tên <strong>"Cà phê Robusta"</strong> đã hết hàng lại nằm ngay vị trí Top 1 vì khớp 100% từ khóa, trong khi các sản phẩm nổi bật hay đang trong chương trình khuyến mãi lại bị đẩy xuống tận trang 2 → Khách bấm vào thấy hết hàng sẽ thoát app, gây mất đơn hàng.</p>
+                            </div>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin-bottom: 0.5rem;" id="s3-req-t">Yêu cầu đặt ra</h3>
+                            <ul>
+                                <li class="editable" id="s3-req-l1">Khớp từ khóa tại <strong>Tiêu đề</strong> phải đứng trên khớp ở <strong>Mô tả chi tiết</strong>.</li>
+                                <li class="editable" id="s3-req-l2">Thưởng điểm ưu tiên cho sản phẩm khớp <strong>nguyên cụm từ</strong> theo đúng ngôn ngữ người dùng tìm.</li>
+                                <li class="editable" id="s3-req-l3">Tự động <strong>ưu tiên</strong> các sản phẩm Nổi bật / Quảng cáo ở các vị trí Top để tối ưu doanh số.</li>
+                                <li class="editable" id="s3-req-l4">Tự động đẩy các sản phẩm <strong>Hết hàng</strong> xuống cuối danh sách để giữ kết quả luôn tươi mới.</li>
+                            </ul>
+
+
+                        </div>
+
+                        <!-- RIGHT: Technical Solution -->
+                        <div class="card card-accent reveal">
+                            <span class="badge">Giải pháp kỹ thuật</span>
+                            <h3 class="card-title editable" style="margin: 0.6rem 0;" id="s3-sol-t">Đánh điểm dựa trên quy tắc — Rule-based Ranking</h3>
+                            <ul>
+                                <li class="editable" style="font-size: var(--small-size);" id="s3-sol-l1"><strong>Phân cấp ưu tiên trường (Field Boosting):</strong> Tên sản phẩm (<code>^5.0</code>) > Danh mục (<code>^3.0</code>) > Mô tả (<code>^1.0</code>). Thưởng <strong>×5.0</strong> lần điểm cho Phrase Match (cụm từ khớp liền nhau).</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s3-sol-l2"><strong>Điều chỉnh điểm nghiệp vụ (Function Score):</strong> Bọc ngoài truy vấn bằng OpenSearch <code>function_score</code> query, sử dụng <code>score_mode: multiply</code> để nhân dồn các hệ số thưởng và phạt với nhau.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s3-sol-l3"><strong>Thưởng Hàng Nổi bật:</strong> Thưởng <strong>+20% điểm (× 1.2)</strong> cho sản phẩm có <code>featured = true</code>.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s3-sol-l4"><strong>Trừ Hàng Hết hàng:</strong> Trừ <strong>-80% điểm (× 0.2)</strong> cho sản phẩm <code>inventory = 0</code>.</li>
+                            </ul>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: SEQUENCE DIAGRAM - REQUIREMENT 3 (RANKING) -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title">Luồng xử lý — Xếp hạng kết quả (Ranking)</h2>
+                    <span class="slide-number">07/15</span>
+                </div>
+                <div class="slide-body" style="justify-content: center; align-items: center; overflow: visible;">
+                    <div class="mermaid">
+sequenceDiagram
+    participant B as Buyer
+    participant SS as Search Service
+    participant OS as OpenSearch
+
+    B->>SS: Tìm kiếm "cà phê" (lang=vi)
+    SS->>OS: Truy vấn Function Score + Field Boost
+    Note over OS: 1. Đánh điểm BM25 (Tên ^5.0, Danh mục ^3.0)<br/>2. Áp dụng Function Score: Featured (x1.2), Inventory=0 (x0.2)<br/>3. Sắp xếp kết quả theo điểm _score giảm dần
+    OS-->>SS: Trả về danh sách đã tối ưu vị trí
+    SS-->>B: Trả kết quả (SP Featured đứng trên, SP hết hàng ở cuối)
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: REQUIREMENT 5 - AI ADMIN ASSISTANT -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="s5-req-title">Yêu cầu 5 — Trợ lý Admin AI</h2>
+                    <span class="slide-number">11/20</span>
+                </div>
+                <div class="slide-body">
+                    <div class="grid-2">
+                        <!-- LEFT: Business Requirement -->
+                        <div class="reveal">
+                            <span class="badge badge-orange">Yêu cầu nghiệp vụ</span>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin: 0.6rem 0;" id="s5-scenario-t">Kịch bản thực tế</h3>
+                            <div style="background: rgba(255,255,255,0.03); border-left: 3px solid var(--accent-orange); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; margin-bottom: 1rem;">
+                                <p class="editable" style="font-style: italic; color: var(--text-secondary);" id="s5-scenario-d">Admin muốn tra cứu tồn kho hay thêm từ đồng nghĩa bằng câu chat tự nhiên thay vì bấm qua nhiều menu. Nhưng nếu AI tự ý sửa dữ liệu live, hệ thống dễ bị rủi ro do ảo giác AI (Hallucination).</p>
+                            </div>
+                            <h3 class="editable" style="color: var(--accent-cyan); margin-bottom: 0.5rem;" id="s5-req-t">Yêu cầu đặt ra</h3>
+                            <ul>
+                                <li class="editable" id="s5-req-l1">Quản trị hệ thống bằng câu lệnh chat bằng ngôn ngữ tự nhiên.</li>
+                                <li class="editable" id="s5-req-l2">Tự động nhận diện ý định và kích hoạt đúng công cụ xử lý (Tool Calling).</li>
+                                <li class="editable" id="s5-req-l3">AI chỉ tạo thẻ đề xuất (Action Card) — bắt buộc Admin bấm duyệt mới được sửa dữ liệu.</li>
+                                <li class="editable" id="s5-req-l4">Phân vùng lịch sử chat an toàn theo từng đối tác (<code>tenant_id</code>).</li>
+                            </ul>
+                        </div>
+
+                        <!-- RIGHT: Technical Solution -->
+                        <div class="card card-accent reveal">
+                            <span class="badge">Giải pháp kỹ thuật</span>
+                            <h3 class="card-title editable" style="margin: 0.6rem 0;" id="s5-sol-t">OpenAI Tool Calling & Admin Approval Gate</h3>
+                            <ul>
+                                <li class="editable" style="font-size: var(--small-size);" id="s5-sol-l1"><strong>Nhận diện ý định (GPT-4o-mini):</strong> Dùng OpenAI Tool Calling tự bóc tách tham số từ câu chat (VD: <em>"bàn phím"</em> ↔ <em>"phím cơ"</em>).</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s5-sol-l2"><strong>Thẻ hành động an toàn (ProposedAction):</strong> AI xuất thẻ đề xuất có nút Duyệt/Từ chối ➔ Admin bấm Duyệt thì hệ thống mới cập nhật.</li>
+                                <li class="editable" style="font-size: var(--small-size);" id="s5-sol-l3"><strong>Lưu trữ đa đối tác (tenant_id):</strong> Lưu lịch sử hội thoại trong PostgreSQL và cô lập tuyệt đối theo từng đối tác.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: REQUIREMENT 5 CODE - OPENAI TOOL CALLING SCHEMA & RESPONSE -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="s5-code-title">Cấu hình OpenAI Tool Calling & Phản hồi API</h2>
+                </div>
+                <div class="slide-body" style="overflow: hidden; padding: 0.4rem 0;">
+                    <div class="grid-2 reveal" style="width: 100%; height: 100%; gap: 1.2rem; align-items: stretch;">
+                        
+                        <!-- LEFT COLUMN: FUNCTION TOOL SCHEMA -->
+                        <div class="card card-accent" style="display: flex; flex-direction: column; padding: 1rem 1.2rem; background: rgba(15,17,26,0.92); border-color: var(--accent-cyan); border-radius: 14px; height: 100%; overflow: hidden;">
+                            <span class="badge" style="margin-bottom: 0.5rem; font-size: 0.9rem; padding: 5px 12px;">1. Cấu hình Tool Definition (Function Schema)</span>
+                            <div style="background: #1e1e2e; border-radius: 10px; padding: 0.8rem 1rem; flex: 1; overflow-y: auto; border: 1px solid rgba(255,255,255,0.08);">
+<pre style="margin: 0; font-family: 'Fira Code', 'Courier New', monospace; font-size: 0.92rem; line-height: 1.4; color: #f8f8f2;"><span style="color:#ff79c6;">{</span>
+  <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"function"</span>,
+  <span style="color:#8be9fd;">"function"</span>: <span style="color:#ff79c6;">{</span>
+    <span style="color:#8be9fd;">"name"</span>: <span style="color:#50fa7b;">"create_synonym"</span>,
+    <span style="color:#8be9fd;">"description"</span>: <span style="color:#f1fa8c;">"Propose creating a new synonym rule between two words. Requires human approval."</span>,
+    <span style="color:#8be9fd;">"parameters"</span>: <span style="color:#ff79c6;">{</span>
+      <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"object"</span>,
+      <span style="color:#8be9fd;">"properties"</span>: <span style="color:#ff79c6;">{</span>
+        <span style="color:#8be9fd;">"keyword"</span>: <span style="color:#ff79c6;">{</span>
+          <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"string"</span>,
+          <span style="color:#8be9fd;">"description"</span>: <span style="color:#f1fa8c;">"Main search term (e.g. 'máy tính')"</span>
+        <span style="color:#ff79c6;">}</span>,
+        <span style="color:#8be9fd;">"synonym"</span>: <span style="color:#ff79c6;">{</span>
+          <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"string"</span>,
+          <span style="color:#8be9fd;">"description"</span>: <span style="color:#f1fa8c;">"Synonym term (e.g. 'computer')"</span>
+        <span style="color:#ff79c6;">}</span>
+      <span style="color:#ff79c6;">}</span>
+    <span style="color:#ff79c6;">}</span>
+  <span style="color:#ff79c6;">}</span>
+<span style="color:#ff79c6;">}</span></pre>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT COLUMN: OPENAI RESPONSE JSON -->
+                        <div class="card card-accent" style="display: flex; flex-direction: column; padding: 1rem 1.2rem; background: rgba(15,17,26,0.92); border-color: var(--accent-orange); border-radius: 14px; height: 100%; overflow: hidden;">
+                            <span class="badge badge-orange" style="margin-bottom: 0.5rem; font-size: 0.9rem; padding: 5px 12px;">2. Phản hồi OpenAI (Tool Call Triggered)</span>
+                            <div style="background: #1e1e2e; border-radius: 10px; padding: 0.8rem 1rem; flex: 1; overflow-y: auto; border: 1px solid rgba(255,255,255,0.08);">
+<pre style="margin: 0; font-family: 'Fira Code', 'Courier New', monospace; font-size: 0.92rem; line-height: 1.4; color: #f8f8f2;"><span style="color:#ff79c6;">{</span>
+  <span style="color:#8be9fd;">"id"</span>: <span style="color:#f1fa8c;">"chatcmpl-EC110F2oPIb1VDqHyY4jhakMBNIYJ"</span>,
+  <span style="color:#8be9fd;">"model"</span>: <span style="color:#f1fa8c;">"gpt-4o-mini-2024-07-18"</span>,
+  <span style="color:#8be9fd;">"choices"</span>: <span style="color:#ff79c6;">[</span>
+    <span style="color:#ff79c6;">{</span>
+      <span style="color:#8be9fd;">"finish_reason"</span>: <span style="color:#50fa7b;">"tool_calls"</span>,
+      <span style="color:#8be9fd;">"message"</span>: <span style="color:#ff79c6;">{</span>
+        <span style="color:#8be9fd;">"role"</span>: <span style="color:#f1fa8c;">"assistant"</span>,
+        <span style="color:#8be9fd;">"tool_calls"</span>: <span style="color:#ff79c6;">[</span>
+          <span style="color:#ff79c6;">{</span>
+            <span style="color:#8be9fd;">"id"</span>: <span style="color:#f1fa8c;">"call_MiS0hgTDBVVp5rnJyEpPV8gk"</span>,
+            <span style="color:#8be9fd;">"type"</span>: <span style="color:#f1fa8c;">"function"</span>,
+            <span style="color:#8be9fd;">"function"</span>: <span style="color:#ff79c6;">{</span>
+              <span style="color:#8be9fd;">"name"</span>: <span style="color:#50fa7b;">"create_synonym"</span>,
+              <span style="color:#8be9fd;">"arguments"</span>: <span style="color:#f1fa8c;">"{\"keyword\":\"đt\",\"synonym\":\"điện thoại\"}"</span>
+            <span style="color:#ff79c6;">}</span>
+          <span style="color:#ff79c6;">}</span>
+        <span style="color:#ff79c6;">]</span>
+      <span style="color:#ff79c6;">}</span>
+    <span style="color:#ff79c6;">}</span>
+  <span style="color:#ff79c6;">]</span>
+<span style="color:#ff79c6;">}</span></pre>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE: CONCLUSION & THANK YOU -->
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-header">
+                    <h2 class="slide-title editable" id="s-thankyou-title">End of Presentation</h2>
+                </div>
+                <div class="slide-body" style="justify-content: center; align-items: center;">
+                    <div class="reveal" style="width: 100%; max-width: 800px;">
+                        <div class="highlight-box" style="text-align: center; padding: 3.5rem 2rem; border-color: var(--accent-cyan);">
+                            <h3 class="editable" style="font-size: 2.8rem; margin-bottom: 0.5rem; color: var(--accent-cyan);" id="s-thankyou-t">Thanks for watching!</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- PRESENTATION SCRIPTS -->
+    <script>
+        /* ===========================================
+           INLINE EDITING CONTROLLER (OPT-IN ONLY)
+           =========================================== */
+        class InlineEditor {
+            constructor() {
+                this.isActive = false;
+                this.toggleButton = document.getElementById('editToggle');
+                this.hotzone = document.querySelector('.edit-hotzone');
+                this.editables = document.querySelectorAll('.editable');
+                this.hideTimeout = null;
+
+                this.setupEditingSystem();
+                this.setupEventListeners();
+                this.loadSavedContent();
+            }
+
+            setupEditingSystem() {
+                // Initial styling for editables to support visual cues in edit mode
+                this.editables.forEach((el, index) => {
+                    if (!el.id) {
+                        el.id = `editable-item-${index}`;
+                    }
+                });
+            }
+
+            setupEventListeners() {
+                // 1. Click toggle button
+                this.toggleButton.addEventListener('click', () => {
+                    this.toggleEditMode();
+                });
+
+                // 2. Hotzone hover with 400ms grace period
+                this.hotzone.addEventListener('mouseenter', () => {
+                    clearTimeout(this.hideTimeout);
+                    this.toggleButton.classList.add('show');
+                });
+                
+                this.hotzone.addEventListener('mouseleave', () => {
+                    this.hideTimeout = setTimeout(() => {
+                        if (!this.isActive) this.toggleButton.classList.remove('show');
+                    }, 400);
+                });
+
+                this.toggleButton.addEventListener('mouseenter', () => {
+                    clearTimeout(this.hideTimeout);
+                });
+
+                this.toggleButton.addEventListener('mouseleave', () => {
+                    this.hideTimeout = setTimeout(() => {
+                        if (!this.isActive) this.toggleButton.classList.remove('show');
+                    }, 400);
+                });
+
+                // 3. Hotzone direct click
+                this.hotzone.addEventListener('click', () => {
+                    this.toggleEditMode();
+                });
+
+                // 4. Keyboard shortcut 'E'
+                document.addEventListener('keydown', (e) => {
+                    if ((e.key === 'e' || e.key === 'E') && !e.target.getAttribute('contenteditable')) {
+                        e.preventDefault();
+                        this.toggleEditMode();
+                    }
+                });
+
+                // 5. Blur event on editables to save state
+                this.editables.forEach(el => {
+                    el.addEventListener('blur', () => {
+                        this.saveContent(el.id, el.innerHTML);
+                    });
+                });
+            }
+
+            toggleEditMode() {
+                this.isActive = !this.isActive;
+                this.toggleButton.classList.toggle('active', this.isActive);
+                
+                const editText = document.getElementById('editText');
+                const editIcon = document.getElementById('editIcon');
+                
+                if (this.isActive) {
+                    editText.textContent = 'Editing Mode';
+                    editIcon.textContent = '💾';
+                    this.toggleButton.classList.add('show');
+                    this.editables.forEach(el => {
+                        el.setAttribute('contenteditable', 'true');
+                    });
+                    // Focus on the first visible editable element
+                    const visibleSlide = document.querySelector('.slide.visible');
+                    if (visibleSlide) {
+                        const firstEditable = visibleSlide.querySelector('.editable');
+                        if (firstEditable) firstEditable.focus();
+                    }
+                } else {
+                    editText.textContent = 'Edit Mode';
+                    editIcon.textContent = '✏️';
+                    this.editables.forEach(el => {
+                        el.removeAttribute('contenteditable');
+                    });
+                    alert('Nội dung đã được lưu tạm vào trình duyệt của bạn (LocalStorage).');
+                }
+            }
+
+            saveContent(id, html) {
+                localStorage.setItem(`slide-edit-${id}`, html);
+            }
+
+            loadSavedContent() {
+                this.editables.forEach(el => {
+                    const saved = localStorage.getItem(`slide-edit-${el.id}`);
+                    if (saved) {
+                        el.innerHTML = saved;
+                    }
+                });
+            }
+        }
+
+        /* ===========================================
+           SLIDE PRESENTATION CONTROLLER
+           =========================================== */
+        class SlidePresentation {
+            constructor() {
+                this.container = document.getElementById('slidesContainer');
+                this.slides = document.querySelectorAll('.slide');
+                this.progressBar = document.getElementById('progressBar');
+                this.navDotsContainer = document.getElementById('navDots');
+                this.currentSlide = 0;
+                this.totalSlides = this.slides.length;
+                this.isMoving = false;
+
+                this.init();
+            }
+
+            init() {
+                this.generateNavDots();
+                this.updateSlideState();
+                this.setupKeyboardNav();
+                this.setupWheelNav();
+                this.setupTouchNav();
+                this.setupResizeHandler();
+            }
+
+            generateNavDots() {
+                this.navDotsContainer.innerHTML = '';
+                this.slides.forEach((_, index) => {
+                    const dot = document.createElement('div');
+                    dot.classList.add('dot');
+                    if (index === 0) dot.classList.add('active');
+                    dot.addEventListener('click', () => this.goToSlide(index));
+                    this.navDotsContainer.appendChild(dot);
+                });
+                this.dots = document.querySelectorAll('.dot');
+            }
+
+            updateSlideState() {
+                // Update transform to scroll container
+                this.container.style.transform = `translateY(-${this.currentSlide * 100}vh)`;
+
+                // Update classes on slide to trigger animations
+                this.slides.forEach((slide, index) => {
+                    if (index === this.currentSlide) {
+                        slide.classList.add('visible');
+                    } else {
+                        slide.classList.remove('visible');
+                    }
+                });
+
+                // Update Progress Bar
+                const progress = ((this.currentSlide) / (this.totalSlides - 1)) * 100;
+                this.progressBar.style.width = `${progress}%`;
+
+                // Update Navigation Dots
+                if (this.dots) {
+                    this.dots.forEach((dot, index) => {
+                        dot.classList.toggle('active', index === this.currentSlide);
+                    });
+                }
+            }
+
+            goToSlide(index) {
+                if (index < 0 || index >= this.totalSlides || this.isMoving) return;
+                this.isMoving = true;
+                this.currentSlide = index;
+                this.updateSlideState();
+                setTimeout(() => {
+                    this.isMoving = false;
+                }, 700); // match transition duration
+            }
+
+            nextSlide() {
+                this.goToSlide(this.currentSlide + 1);
+            }
+
+            prevSlide() {
+                this.goToSlide(this.currentSlide - 1);
+            }
+
+            setupKeyboardNav() {
+                document.addEventListener('keydown', (e) => {
+                    // Do not navigate if user is currently editing text in edit mode
+                    if (e.target.getAttribute('contenteditable')) return;
+
+                    switch (e.key) {
+                        case 'ArrowDown':
+                        case 'ArrowRight':
+                        case 'PageDown':
+                        case ' ':
+                            e.preventDefault();
+                            this.nextSlide();
+                            break;
+                        case 'ArrowUp':
+                        case 'ArrowLeft':
+                        case 'PageUp':
+                            e.preventDefault();
+                            this.prevSlide();
+                            break;
+                        case 'Home':
+                            e.preventDefault();
+                            this.goToSlide(0);
+                            break;
+                        case 'End':
+                            e.preventDefault();
+                            this.goToSlide(this.totalSlides - 1);
+                            break;
+                    }
+                });
+            }
+
+
+            setupWheelNav() {
+                window.addEventListener('wheel', (e) => {
+                    if (e.target && e.target.getAttribute && e.target.getAttribute('contenteditable')) return;
+                    if (this.isMoving) return;
+
+                    if (Math.abs(e.deltaY) > 25) { // threshold for scroll wheel / trackpad
+                        if (e.deltaY > 0) {
+                            this.nextSlide();
+                        } else if (e.deltaY < 0) {
+                            this.prevSlide();
+                        }
+                    }
+                }, { passive: true });
+            }
+
+            setupTouchNav() {
+                let startY = 0;
+                document.addEventListener('touchstart', (e) => {
+                    startY = e.touches[0].clientY;
+                }, { passive: true });
+
+                document.addEventListener('touchend', (e) => {
+                    const endY = e.changedTouches[0].clientY;
+                    const diffY = startY - endY;
+
+                    if (Math.abs(diffY) > 50) { // swipe threshold
+                        if (diffY > 0) {
+                            this.nextSlide();
+                        } else {
+                            this.prevSlide();
+                        }
+                    }
+                }, { passive: true });
+            }
+
+            setupResizeHandler() {
+                window.addEventListener('resize', () => {
+                    // Re-align container to current slide on window resize
+                    this.container.style.transform = `translateY(-${this.currentSlide * 100}vh)`;
+                });
+            }
+        }
+
+        // Initialize presentation elements on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const presentation = new SlidePresentation();
+            const editor = new InlineEditor();
+        });
+    </script>
+</body>
+</html>
