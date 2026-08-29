@@ -1,0 +1,19 @@
+.idea/
+.vscode/
+.DS_Store
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Go build & test caches & binaries
+.cache/
+.go/
+.tmp/
+bin/
+serverd
+workerd
+inspect_mapping
+delete_index
+scratch/
