@@ -1,4 +1,21 @@
-# SwiftSearch Engine Backend
+<div align="center">
+
+# 🔍 SwiftSearch Engine (`search-engine`)
+
+**The high-performance, event-driven Search Engine & Product Ingestion platform.**
+
+[![Go Version](https://img.shields.io/badge/Go-1.21%2B-00ADD8?style=flat-square&logo=go)](https://golang.org)
+[![Framework](https://img.shields.io/badge/Gin-v1.9-008080?style=flat-square&logo=gin)](https://gin-gonic.com)
+[![OpenSearch](https://img.shields.io/badge/OpenSearch-2.12-005ECC?style=flat-square&logo=opensearch)](https://opensearch.org)
+[![Kafka](https://img.shields.io/badge/Apache%20Kafka-KRaft-231F20?style=flat-square&logo=apachekafka)](https://kafka.apache.org)
+[![Database](https://img.shields.io/badge/PostgreSQL-Multi--Schema-4169E1?style=flat-square&logo=postgresql)](https://www.postgresql.org)
+[![Cache](https://img.shields.io/badge/Redis-7.0-DC382D?style=flat-square&logo=redis)](https://redis.io)
+[![AI Integration](https://img.shields.io/badge/OpenAI-GPT--4o--mini-412991?style=flat-square&logo=openai)](https://openai.com)
+[![Deployment](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED?style=flat-square&logo=docker)](https://www.docker.com)
+
+</div>
+
+---
 
 Event-driven search and product ingestion system built with Go, Kafka, OpenSearch, PostgreSQL, and Redis.
 
